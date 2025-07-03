@@ -17,19 +17,25 @@ export default function LibraryScreen() {
 
   useEffect(() => {
     return () => {
-      if (Platform.OS === 'web') {
-        if (webAudioRef.current) {
-          webAudioRef.current.pause();
-          webAudioRef.current = null;
-        }
-      } else {
-        if (soundRef.current) {
-          soundRef.current.unloadAsync();
-          soundRef.current = null;
-        }
-      }
+      cleanupAudio();
     };
   }, []);
+
+  const cleanupAudio = () => {
+    if (Platform.OS === 'web') {
+      if (webAudioRef.current) {
+        webAudioRef.current.pause();
+        webAudioRef.current.src = '';
+        webAudioRef.current.load();
+        webAudioRef.current = null;
+      }
+    } else {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync();
+        soundRef.current = null;
+      }
+    }
+  };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -59,18 +65,7 @@ export default function LibraryScreen() {
               try {
                 // Stop playback if this recording is playing
                 if (playingId === recording.id) {
-                  if (Platform.OS === 'web') {
-                    if (webAudioRef.current) {
-                      webAudioRef.current.pause();
-                      webAudioRef.current = null;
-                    }
-                  } else {
-                    if (soundRef.current) {
-                      await soundRef.current.stopAsync();
-                      await soundRef.current.unloadAsync();
-                      soundRef.current = null;
-                    }
-                  }
+                  cleanupAudio();
                   setPlayingId(null);
                   setIsPlaying(false);
                 }
@@ -116,8 +111,23 @@ export default function LibraryScreen() {
           setIsPlaying(false);
         } else {
           if (playingId && playingId !== recording.id) {
+            // Properly cleanup existing audio before creating new one
             webAudioRef.current.pause();
+            webAudioRef.current.src = '';
+            webAudioRef.current.load();
             webAudioRef.current = new window.Audio(recording.uri);
+            
+            webAudioRef.current.onended = () => {
+              setPlayingId(null);
+              setIsPlaying(false);
+            };
+
+            webAudioRef.current.onerror = () => {
+              console.error('Audio playback error');
+              Alert.alert(t('library.playbackError'));
+              setPlayingId(null);
+              setIsPlaying(false);
+            };
           }
           
           try {

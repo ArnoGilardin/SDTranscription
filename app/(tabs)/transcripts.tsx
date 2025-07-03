@@ -45,15 +45,27 @@ export default function TranscriptsScreen() {
     })();
 
     return () => {
-      if (audioRef.current) {
-        Object.entries(eventListenersRef.current).forEach(([event, listener]) => {
-          audioRef.current?.removeEventListener(event, listener);
-        });
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
+      cleanupAudio();
     };
   }, []);
+
+  const cleanupAudio = () => {
+    if (audioRef.current) {
+      // Remove event listeners first
+      Object.entries(eventListenersRef.current).forEach(([event, listener]) => {
+        audioRef.current?.removeEventListener(event, listener);
+      });
+      
+      // Properly cleanup the audio element
+      audioRef.current.pause();
+      audioRef.current.src = '';
+      audioRef.current.load();
+      audioRef.current = null;
+      
+      // Clear event listeners reference
+      eventListenersRef.current = {};
+    }
+  };
 
   const saveTranscriptToFile = async (recording: any, transcript: string) => {
     if (Platform.OS === 'web') {
@@ -82,13 +94,8 @@ export default function TranscriptsScreen() {
         return;
       }
 
-      // Remove existing event listeners if any
-      if (audioRef.current) {
-        Object.entries(eventListenersRef.current).forEach(([event, listener]) => {
-          audioRef.current?.removeEventListener(event, listener);
-        });
-        audioRef.current.pause();
-      }
+      // Cleanup existing audio properly
+      cleanupAudio();
 
       // Create new audio instance
       const audio = new Audio(recording.uri);
