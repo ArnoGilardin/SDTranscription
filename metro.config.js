@@ -24,6 +24,6 @@ config.cacheStores = [];
 
 // Configure resolver for Expo Go
 config.resolver.sourceExts = ['js', 'jsx', 'json', 'ts', 'tsx', 'cjs'];
-config.resolver.assetExts = ['png', 'jpg', 'jpeg', 'gif', 'wav', 'mp4', 'm4a'];
+config.resolver.assetExts = ['png', 'jpg', 'jpeg', 'gif', 'wav', 'mp4', 'm4a', 'ttf', 'otf'];
 
 module.exports = config;
