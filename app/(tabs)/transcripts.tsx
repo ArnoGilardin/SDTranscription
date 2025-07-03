@@ -113,13 +113,21 @@ export default function TranscriptsScreen() {
         audioRef.current?.removeEventListener(event, listener);
       });
       
-      // Pause and clear source, but keep the audio element
+      // Pause and clear source
       audioRef.current.pause();
       audioRef.current.src = '';
+      
+      // Nullify the audio reference to prevent stale references
+      audioRef.current = null;
       
       // Clear event listeners reference
       eventListenersRef.current = {};
     }
+    
+    // Reset state values
+    setPlayingId(null);
+    setIsPlaying(false);
+    progressValue.value = 0;
   };
 
   const saveTranscriptToFile = async (recording: any, transcript: string) => {
@@ -143,6 +151,12 @@ export default function TranscriptsScreen() {
 
   const handlePlayPause = async (recording: any) => {
     try {
+      // Re-initialize audio element if it was cleaned up
+      if (Platform.OS === 'web' && !audioRef.current) {
+        audioRef.current = new Audio();
+        setupAudioEventListeners();
+      }
+
       if (!audioRef.current) {
         console.error('Audio element not initialized');
         return;
