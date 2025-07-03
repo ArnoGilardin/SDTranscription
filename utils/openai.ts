@@ -10,6 +10,25 @@ const openai = new OpenAI({
   dangerouslyAllowBrowser: true
 });
 
+// Helper function to check if a URL is reachable
+async function checkApiHealth(apiUrl: string): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout for health check
+    
+    const response = await fetch(apiUrl.replace('/api/whisper', '/health'), {
+      method: 'GET',
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+    return response.ok;
+  } catch (error) {
+    console.log('API health check failed:', error);
+    return false;
+  }
+}
+
 export async function transcribeAudioRemote(
   audioData: string | Blob, 
   apiKey: string, 
@@ -17,6 +36,14 @@ export async function transcribeAudioRemote(
 ): Promise<string> {
   if (!apiKey) {
     throw new Error('Clé API manquante pour la transcription distante.');
+  }
+
+  const apiUrl = 'https://gilardinservice.shop/api/whisper';
+  
+  // Check API health first
+  const isApiHealthy = await checkApiHealth('https://gilardinservice.shop');
+  if (!isApiHealthy) {
+    throw new Error('Le service de transcription est temporairement indisponible. Veuillez réessayer plus tard ou utiliser le mode local.');
   }
 
   try {
@@ -81,7 +108,7 @@ export async function transcribeAudioRemote(
 
     formData.append('model', model);
 
-    const maxRetries = 3;
+    const maxRetries = 2; // Reduced retries for faster failure
     let lastError = null;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -89,9 +116,9 @@ export async function transcribeAudioRemote(
         console.log(`Attempting transcription (attempt ${attempt}/${maxRetries})`);
         
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // Reduced timeout to 30 seconds
 
-        const response = await fetch('https://gilardinservice.shop/api/whisper', {
+        const response = await fetch(apiUrl, {
           method: 'POST',
           headers: {
             'X-API-KEY': apiKey,
@@ -111,6 +138,15 @@ export async function transcribeAudioRemote(
             errorData = { error: { message: errorText } };
           }
           
+          // Handle specific HTTP status codes
+          if (response.status === 0 || response.status >= 500) {
+            throw new Error('SERVICE_UNAVAILABLE');
+          } else if (response.status === 404) {
+            throw new Error('SERVICE_NOT_FOUND');
+          } else if (response.status === 401 || response.status === 403) {
+            throw new Error('AUTHENTICATION_ERROR');
+          }
+          
           throw new Error(
             `API request failed with status ${response.status}: ${errorData.error?.message || errorText}`
           );
@@ -128,39 +164,50 @@ export async function transcribeAudioRemote(
         console.error(`Attempt ${attempt} failed:`, error);
         lastError = error;
 
-        // Check for specific error types
-        if (error.name === 'AbortError') {
-          lastError.message = 'Request timeout - the transcription service took too long to respond';
+        // Check for specific error types that shouldn't be retried
+        if (error.message === 'AUTHENTICATION_ERROR' || 
+            error.message === 'SERVICE_NOT_FOUND' ||
+            error.message.includes('413') || 
+            error.message.includes('Payload Too Large')) {
+          break; // Don't retry these errors
         }
 
-        const isRetryableError = error.message.includes('Network') || 
-                               error.message.includes('ECONNREFUSED') ||
-                               error.message.includes('timeout') ||
-                               error.message.includes('Failed to fetch') ||
-                               error.name === 'AbortError';
+        // Check for network errors that might be retryable
+        const isNetworkError = error.name === 'AbortError' ||
+                              error.name === 'TypeError' ||
+                              error.message === 'SERVICE_UNAVAILABLE' ||
+                              error.message.includes('Failed to fetch') ||
+                              error.message.includes('Network') ||
+                              error.message.includes('ECONNREFUSED') ||
+                              error.message.includes('timeout');
 
-        if (!isRetryableError || attempt === maxRetries) {
+        if (!isNetworkError || attempt === maxRetries) {
           break;
         }
 
-        // Exponential backoff
-        const delay = Math.min(Math.pow(2, attempt) * 1000, 10000);
+        // Shorter delay for faster user feedback
+        const delay = Math.min(1000 * attempt, 3000);
         console.log(`Retrying in ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
 
     if (lastError) {
-      if (lastError.message.includes('401') || lastError.message.includes('Unauthorized')) {
-        throw new Error('Erreur d\'authentification API. Veuillez vérifier votre clé API.');
+      // Provide more specific error messages
+      if (lastError.message === 'AUTHENTICATION_ERROR') {
+        throw new Error('Erreur d\'authentification API. Veuillez vérifier votre clé API dans les paramètres.');
+      } else if (lastError.message === 'SERVICE_NOT_FOUND') {
+        throw new Error('Service de transcription introuvable. Veuillez contacter le support.');
+      } else if (lastError.message === 'SERVICE_UNAVAILABLE') {
+        throw new Error('Le service de transcription est temporairement indisponible. Veuillez réessayer plus tard.');
+      } else if (lastError.name === 'AbortError' || lastError.message.includes('timeout')) {
+        throw new Error('Délai d\'attente dépassé. Le service met trop de temps à répondre. Veuillez réessayer.');
+      } else if (lastError.name === 'TypeError' || lastError.message.includes('Failed to fetch')) {
+        throw new Error('Impossible de se connecter au service de transcription. Vérifiez votre connexion internet ou essayez le mode local.');
       } else if (lastError.message.includes('429') || lastError.message.includes('Too Many Requests')) {
         throw new Error('Limite de requêtes API atteinte. Veuillez réessayer plus tard.');
-      } else if (lastError.message.includes('Network') || lastError.message.includes('Failed to fetch')) {
-        throw new Error('Erreur de connexion réseau. Veuillez vérifier votre connexion internet et réessayer.');
       } else if (lastError.message.includes('413') || lastError.message.includes('Payload Too Large')) {
         throw new Error('Le fichier audio est trop volumineux. Veuillez réduire sa taille.');
-      } else if (lastError.message.includes('timeout')) {
-        throw new Error('Timeout - Le service de transcription met trop de temps à répondre. Veuillez réessayer.');
       }
       
       throw new Error(`Erreur lors de la transcription: ${lastError.message}`);

@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Platform, ScrollView, Alert } from 'react-native';
-import { FileText, RefreshCcw, Download, Share2, Play, Pause } from 'lucide-react-native';
+import { FileText, RefreshCcw, Download, Share2, Play, Pause, AlertTriangle } from 'lucide-react-native';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useRecordingsStore } from '@/stores/recordingsStore';
 import { transcribeAudio, transcribeAudioRemote } from '@/utils/openai';
@@ -56,6 +56,7 @@ export default function TranscriptsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [serviceStatus, setServiceStatus] = useState<'unknown' | 'available' | 'unavailable'>('unknown');
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const currentTimeRef = useRef<number>(0);
@@ -77,10 +78,33 @@ export default function TranscriptsScreen() {
       }
     })();
 
+    // Check service status on mount
+    checkServiceStatus();
+
     return () => {
       cleanupAudio();
     };
   }, []);
+
+  const checkServiceStatus = async () => {
+    if (transcriptionSettings.mode === 'remote') {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
+        const response = await fetch('https://gilardinservice.shop/health', {
+          method: 'GET',
+          signal: controller.signal,
+        });
+        
+        clearTimeout(timeoutId);
+        setServiceStatus(response.ok ? 'available' : 'unavailable');
+      } catch (error) {
+        console.log('Service health check failed:', error);
+        setServiceStatus('unavailable');
+      }
+    }
+  };
 
   const setupAudioEventListeners = () => {
     if (!audioRef.current) return;
@@ -254,6 +278,11 @@ export default function TranscriptsScreen() {
           throw new Error('Clé API manquante. Veuillez configurer votre clé API dans les paramètres.');
         }
         
+        // Check service status before attempting transcription
+        if (serviceStatus === 'unavailable') {
+          throw new Error('Le service de transcription distant est indisponible. Veuillez essayer le mode local ou réessayer plus tard.');
+        }
+        
         transcript = await transcribeAudioRemote(
           audioData, 
           transcriptionSettings.remoteApiKey, 
@@ -283,7 +312,21 @@ export default function TranscriptsScreen() {
       updateTranscript(id, transcript, words);
     } catch (err: any) {
       console.error('Transcription error:', err);
-      setError(err.message || t('transcripts.transcriptionError'));
+      
+      // Provide more user-friendly error messages
+      let errorMessage = err.message || t('transcripts.transcriptionError');
+      
+      // Check for specific network-related errors
+      if (errorMessage.includes('Failed to fetch') || 
+          errorMessage.includes('Network') ||
+          errorMessage.includes('connexion')) {
+        errorMessage = 'Problème de connexion au service de transcription. Vérifiez votre connexion internet ou essayez le mode local.';
+        
+        // Update service status
+        setServiceStatus('unavailable');
+      }
+      
+      setError(errorMessage);
     } finally {
       setProcessingId(null);
     }
@@ -354,16 +397,25 @@ export default function TranscriptsScreen() {
 
   const getTranscriptionModeText = () => {
     if (transcriptionSettings.mode === 'remote') {
-      return `API Distante (${transcriptionSettings.model})`;
+      const statusIcon = serviceStatus === 'available' ? '🟢' : 
+                        serviceStatus === 'unavailable' ? '🔴' : '🟡';
+      return `API Distante (${transcriptionSettings.model}) ${statusIcon}`;
     }
     return 'OpenAI Whisper';
   };
 
   const canTranscribe = () => {
     if (transcriptionSettings.mode === 'remote') {
-      return !!transcriptionSettings.remoteApiKey;
+      return !!transcriptionSettings.remoteApiKey && serviceStatus !== 'unavailable';
     }
     return true; // OpenAI mode always available if API key is set
+  };
+
+  const getServiceStatusMessage = () => {
+    if (transcriptionSettings.mode === 'remote' && serviceStatus === 'unavailable') {
+      return 'Le service de transcription distant est actuellement indisponible. Vous pouvez essayer le mode local ou réessayer plus tard.';
+    }
+    return null;
   };
 
   return (
@@ -376,14 +428,34 @@ export default function TranscriptsScreen() {
       {error && (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity 
+            style={styles.dismissButton}
+            onPress={() => setError(null)}>
+            <Text style={styles.dismissButtonText}>Fermer</Text>
+          </TouchableOpacity>
         </View>
       )}
 
-      {!canTranscribe() && (
+      {!canTranscribe() && !getServiceStatusMessage() && (
         <View style={styles.warningContainer}>
           <Text style={styles.warningText}>
             Veuillez configurer votre clé API dans les paramètres pour utiliser la transcription.
           </Text>
+        </View>
+      )}
+
+      {getServiceStatusMessage() && (
+        <View style={styles.serviceStatusContainer}>
+          <AlertTriangle size={20} color="#F59E0B" />
+          <Text style={styles.serviceStatusText}>
+            {getServiceStatusMessage()}
+          </Text>
+          <TouchableOpacity 
+            style={styles.retryButton}
+            onPress={checkServiceStatus}>
+            <RefreshCcw size={16} color="#F59E0B" />
+            <Text style={styles.retryButtonText}>Réessayer</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -516,11 +588,26 @@ const styles = StyleSheet.create({
     padding: THEME.spacing.md,
     backgroundColor: THEME.colors.accentLight,
     borderRadius: THEME.borderRadius.md,
+    borderWidth: 1,
+    borderColor: THEME.colors.error,
   },
   errorText: {
     ...THEME.typography.body,
     color: THEME.colors.error,
     textAlign: 'center',
+    marginBottom: THEME.spacing.sm,
+  },
+  dismissButton: {
+    alignSelf: 'center',
+    paddingHorizontal: THEME.spacing.md,
+    paddingVertical: THEME.spacing.xs,
+    backgroundColor: THEME.colors.error,
+    borderRadius: THEME.borderRadius.sm,
+  },
+  dismissButtonText: {
+    ...THEME.typography.caption,
+    color: 'white',
+    fontWeight: '600',
   },
   warningContainer: {
     margin: THEME.spacing.md,
@@ -534,6 +621,36 @@ const styles = StyleSheet.create({
     ...THEME.typography.body,
     color: '#F59E0B',
     textAlign: 'center',
+  },
+  serviceStatusContainer: {
+    margin: THEME.spacing.md,
+    padding: THEME.spacing.md,
+    backgroundColor: '#F59E0B10',
+    borderRadius: THEME.borderRadius.md,
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: THEME.spacing.sm,
+  },
+  serviceStatusText: {
+    ...THEME.typography.body,
+    color: '#F59E0B',
+    flex: 1,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: THEME.spacing.xs,
+    paddingHorizontal: THEME.spacing.sm,
+    paddingVertical: THEME.spacing.xs,
+    backgroundColor: '#F59E0B20',
+    borderRadius: THEME.borderRadius.sm,
+  },
+  retryButtonText: {
+    ...THEME.typography.caption,
+    color: '#F59E0B',
+    fontWeight: '600',
   },
   listContent: {
     padding: THEME.spacing.md,
