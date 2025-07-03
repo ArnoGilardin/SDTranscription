@@ -44,6 +44,8 @@ export default function RecordScreen() {
   const durationTimer = useRef<NodeJS.Timeout | null>(null);
   const isUnloading = useRef(false);
   const startTime = useRef<Date | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   // Cleanup function to handle recording stop and resource cleanup
   const cleanupRecording = async () => {
@@ -61,7 +63,21 @@ export default function RecordScreen() {
         }
       }
 
-      if (recording && !isUnloading.current) {
+      // Handle web MediaRecorder cleanup
+      if (Platform.OS === 'web' && mediaRecorderRef.current) {
+        try {
+          if (mediaRecorderRef.current.state === 'recording') {
+            mediaRecorderRef.current.stop();
+          }
+          mediaRecorderRef.current = null;
+          audioChunksRef.current = [];
+        } catch (error) {
+          console.error('Error stopping MediaRecorder:', error);
+        }
+      }
+
+      // Handle native Audio.Recording cleanup
+      if (Platform.OS !== 'web' && recording && !isUnloading.current) {
         isUnloading.current = true;
         try {
           await recording.stopAndUnloadAsync();
@@ -107,7 +123,13 @@ export default function RecordScreen() {
           setHasPermission(false);
         }
       } else {
-        setHasPermission(true);
+        // Web platform - check for MediaRecorder support
+        if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/webm')) {
+          setHasPermission(true);
+        } else {
+          setError('Recording not supported in this browser');
+          setHasPermission(false);
+        }
       }
     })();
 
@@ -208,14 +230,21 @@ export default function RecordScreen() {
       }
 
       const savedUri = await saveRecordingToLibrary(asset.uri);
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: savedUri },
-        { shouldPlay: false }
-      );
-      const status = await sound.getStatusAsync();
-      await sound.unloadAsync();
-
-      const durationInSeconds = Math.round((status as any).durationMillis / 1000);
+      
+      let durationInSeconds = 0;
+      
+      if (Platform.OS !== 'web') {
+        const { sound } = await Audio.Sound.createAsync(
+          { uri: savedUri },
+          { shouldPlay: false }
+        );
+        const status = await sound.getStatusAsync();
+        await sound.unloadAsync();
+        durationInSeconds = Math.round((status as any).durationMillis / 1000);
+      } else {
+        // For web, we'll set a default duration since we can't easily get it
+        durationInSeconds = 60; // Default 1 minute
+      }
 
       const newRecording = {
         id: Date.now().toString(),
@@ -233,6 +262,51 @@ export default function RecordScreen() {
     }
   };
 
+  const startWebRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'audio/webm'
+      });
+      
+      audioChunksRef.current = [];
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+      
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const audioUrl = URL.createObjectURL(audioBlob);
+        
+        if (currentRecordingId) {
+          const newRecording = {
+            id: currentRecordingId,
+            title: generateTitle(),
+            uri: audioUrl,
+            duration,
+            date: new Date().toISOString(),
+            speakers: [],
+          };
+          addRecording(newRecording);
+        }
+        
+        // Clean up stream
+        stream.getTracks().forEach(track => track.stop());
+      };
+      
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start();
+      
+      return true;
+    } catch (error) {
+      console.error('Error starting web recording:', error);
+      throw error;
+    }
+  };
+
   async function startRecording() {
     try {
       if (isRecording || isProcessing) return;
@@ -247,28 +321,39 @@ export default function RecordScreen() {
             return;
           }
           setHasPermission(true);
+        } else {
+          // For web, request microphone permission
+          try {
+            await navigator.mediaDevices.getUserMedia({ audio: true });
+            setHasPermission(true);
+          } catch (error) {
+            setError('Microphone permission denied');
+            return;
+          }
         }
       }
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-
-      const { recording: newRecording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-      
-      if (Platform.OS !== 'web') {
-        await activateKeepAwakeAsync();
-      }
-      
       const newRecordingId = Date.now().toString();
       setCurrentRecordingId(newRecordingId);
       startTime.current = new Date();
-      setRecording(newRecording);
       setIsRecording(true);
       setDuration(0);
+
+      if (Platform.OS === 'web') {
+        await startWebRecording();
+      } else {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          playsInSilentModeIOS: true,
+        });
+
+        const { recording: newRecording } = await Audio.Recording.createAsync(
+          Audio.RecordingOptionsPresets.HIGH_QUALITY
+        );
+        
+        await activateKeepAwakeAsync();
+        setRecording(newRecording);
+      }
 
       durationTimer.current = setInterval(() => {
         setDuration(prev => prev + 1);
@@ -282,7 +367,7 @@ export default function RecordScreen() {
   }
 
   async function stopRecording() {
-    if (!recording || !currentRecordingId || isUnloading.current || !isRecording) {
+    if ((!recording && Platform.OS !== 'web') || !currentRecordingId || isUnloading.current || !isRecording) {
       return;
     }
 
@@ -296,27 +381,35 @@ export default function RecordScreen() {
         durationTimer.current = null;
       }
 
-      // Get the URI before stopping the recording
-      const uri = recording.getURI();
-      
-      // Stop and unload the recording
-      await recording.stopAndUnloadAsync();
-      
-      if (Platform.OS !== 'web') {
-        await deactivateKeepAwakeAsync();
-      }
-      
-      if (uri) {
-        const savedUri = await saveRecordingToLibrary(uri);
-        const newRecording = {
-          id: currentRecordingId,
-          title: generateTitle(),
-          uri: savedUri,
-          duration,
-          date: new Date().toISOString(),
-          speakers: [],
-        };
-        addRecording(newRecording);
+      if (Platform.OS === 'web') {
+        // Stop web recording
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+          mediaRecorderRef.current.stop();
+        }
+      } else {
+        // Stop native recording
+        if (recording) {
+          // Get the URI before stopping the recording
+          const uri = recording.getURI();
+          
+          // Stop and unload the recording
+          await recording.stopAndUnloadAsync();
+          
+          await deactivateKeepAwakeAsync();
+          
+          if (uri) {
+            const savedUri = await saveRecordingToLibrary(uri);
+            const newRecording = {
+              id: currentRecordingId,
+              title: generateTitle(),
+              uri: savedUri,
+              duration,
+              date: new Date().toISOString(),
+              speakers: [],
+            };
+            addRecording(newRecording);
+          }
+        }
       }
       
     } catch (err) {

@@ -101,18 +101,33 @@ export async function transcribeAudioRemote(
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
+        console.log(`Attempting transcription (attempt ${attempt}/${maxRetries})`);
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+
         const response = await fetch('https://gilardinservice.shop/api/whisper', {
           method: 'POST',
           headers: {
             'X-API-KEY': apiKey,
           },
           body: formData,
+          signal: controller.signal,
         });
 
+        clearTimeout(timeoutId);
+
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
+          const errorText = await response.text().catch(() => 'Unknown error');
+          let errorData;
+          try {
+            errorData = JSON.parse(errorText);
+          } catch {
+            errorData = { error: { message: errorText } };
+          }
+          
           throw new Error(
-            `API request failed with status ${response.status}: ${errorData.error?.message || 'Unknown error'}`
+            `API request failed with status ${response.status}: ${errorData.error?.message || errorText}`
           );
         }
 
@@ -128,27 +143,39 @@ export async function transcribeAudioRemote(
         console.error(`Attempt ${attempt} failed:`, error);
         lastError = error;
 
-        const isNetworkError = error.message.includes('Network') || 
-                             error.message.includes('ECONNREFUSED') ||
-                             error.message.includes('timeout');
+        // Check for specific error types
+        if (error.name === 'AbortError') {
+          lastError.message = 'Request timeout - the transcription service took too long to respond';
+        }
 
-        if (!isNetworkError || attempt === maxRetries) {
+        const isRetryableError = error.message.includes('Network') || 
+                               error.message.includes('ECONNREFUSED') ||
+                               error.message.includes('timeout') ||
+                               error.message.includes('Failed to fetch') ||
+                               error.name === 'AbortError';
+
+        if (!isRetryableError || attempt === maxRetries) {
           break;
         }
 
-        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+        // Exponential backoff
+        const delay = Math.min(Math.pow(2, attempt) * 1000, 10000);
+        console.log(`Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
 
     if (lastError) {
-      if (lastError.status === 401) {
+      if (lastError.message.includes('401') || lastError.message.includes('Unauthorized')) {
         throw new Error('Erreur d\'authentification API. Veuillez vérifier votre clé API.');
-      } else if (lastError.status === 429) {
+      } else if (lastError.message.includes('429') || lastError.message.includes('Too Many Requests')) {
         throw new Error('Limite de requêtes API atteinte. Veuillez réessayer plus tard.');
-      } else if (lastError.message.includes('Network')) {
-        throw new Error('Erreur de connexion réseau. Veuillez vérifier votre connexion internet.');
-      } else if (lastError.message.includes('413')) {
+      } else if (lastError.message.includes('Network') || lastError.message.includes('Failed to fetch')) {
+        throw new Error('Erreur de connexion réseau. Veuillez vérifier votre connexion internet et réessayer.');
+      } else if (lastError.message.includes('413') || lastError.message.includes('Payload Too Large')) {
         throw new Error('Le fichier audio est trop volumineux. Veuillez réduire sa taille.');
+      } else if (lastError.message.includes('timeout')) {
+        throw new Error('Timeout - Le service de transcription met trop de temps à répondre. Veuillez réessayer.');
       }
       
       throw new Error(`Erreur lors de la transcription: ${lastError.message}`);
@@ -224,18 +251,33 @@ export async function transcribeAudio(uri: string, speakers: any[]): Promise<{ t
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
+        console.log(`Attempting OpenAI transcription (attempt ${attempt}/${maxRetries})`);
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+
         const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${apiKey}`,
           },
           body: formData,
+          signal: controller.signal,
         });
 
+        clearTimeout(timeoutId);
+
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
+          const errorText = await response.text().catch(() => 'Unknown error');
+          let errorData;
+          try {
+            errorData = JSON.parse(errorText);
+          } catch {
+            errorData = { error: { message: errorText } };
+          }
+          
           throw new Error(
-            `API request failed with status ${response.status}: ${errorData.error?.message || 'Unknown error'}`
+            `API request failed with status ${response.status}: ${errorData.error?.message || errorText}`
           );
         }
 
@@ -292,29 +334,41 @@ export async function transcribeAudio(uri: string, speakers: any[]): Promise<{ t
         console.error(`Attempt ${attempt} failed:`, error);
         lastError = error;
 
-        const isNetworkError = error.message.includes('Network') || 
-                             error.message.includes('ECONNREFUSED') ||
-                             error.message.includes('timeout');
+        // Check for specific error types
+        if (error.name === 'AbortError') {
+          lastError.message = 'Request timeout - OpenAI API took too long to respond';
+        }
 
-        if (!isNetworkError || attempt === maxRetries) {
+        const isRetryableError = error.message.includes('Network') || 
+                               error.message.includes('ECONNREFUSED') ||
+                               error.message.includes('timeout') ||
+                               error.message.includes('Failed to fetch') ||
+                               error.name === 'AbortError';
+
+        if (!isRetryableError || attempt === maxRetries) {
           break;
         }
 
-        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+        // Exponential backoff
+        const delay = Math.min(Math.pow(2, attempt) * 1000, 10000);
+        console.log(`Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
 
     if (lastError) {
-      if (lastError.status === 401) {
+      if (lastError.message.includes('401') || lastError.message.includes('Unauthorized')) {
         throw new Error('Erreur d\'authentification API. Veuillez vérifier votre clé API.');
-      } else if (lastError.status === 429) {
+      } else if (lastError.message.includes('429') || lastError.message.includes('Too Many Requests')) {
         throw new Error('Limite de requêtes API atteinte. Veuillez réessayer plus tard.');
       } else if (lastError.message.includes('insufficient_quota')) {
         throw new Error('Quota API insuffisant. Veuillez vérifier votre abonnement OpenAI.');
-      } else if (lastError.message.includes('Network')) {
-        throw new Error('Erreur de connexion réseau. Veuillez vérifier votre connexion internet.');
-      } else if (lastError.message.includes('413')) {
+      } else if (lastError.message.includes('Network') || lastError.message.includes('Failed to fetch')) {
+        throw new Error('Erreur de connexion réseau. Veuillez vérifier votre connexion internet et réessayer.');
+      } else if (lastError.message.includes('413') || lastError.message.includes('Payload Too Large')) {
         throw new Error('Le fichier audio est trop volumineux. Veuillez réduire sa taille.');
+      } else if (lastError.message.includes('timeout')) {
+        throw new Error('Timeout - OpenAI API met trop de temps à répondre. Veuillez réessayer.');
       }
       
       throw new Error(`Erreur lors de la transcription: ${lastError.message}`);
