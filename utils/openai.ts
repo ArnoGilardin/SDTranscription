@@ -38,6 +38,130 @@ async function compressAudio(uri: string): Promise<string> {
   }
 }
 
+export async function transcribeAudioRemote(
+  uri: string, 
+  apiKey: string, 
+  model: 'small' | 'medium' = 'small'
+): Promise<string> {
+  if (!apiKey) {
+    throw new Error('Clé API manquante pour la transcription distante.');
+  }
+
+  try {
+    let formData = new FormData();
+    let audioUri = await compressAudio(uri);
+    
+    if (Platform.OS === 'web') {
+      try {
+        const response = await fetch(audioUri);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch audio file: ${response.statusText}`);
+        }
+        
+        const audioBlob = await response.blob();
+        if (audioBlob.size > MAX_FILE_SIZE) {
+          throw new Error('Le fichier audio est trop volumineux. La taille maximale est de 25 Mo.');
+        }
+        formData.append('file', audioBlob, 'audio.m4a');
+      } catch (error) {
+        console.error('Error fetching audio file:', error);
+        throw new Error('Impossible d\'accéder au fichier audio sur le web.');
+      }
+    } else {
+      try {
+        const fileInfo = await FileSystem.getInfoAsync(audioUri);
+        if (!fileInfo.exists) {
+          throw new Error('Le fichier audio est introuvable');
+        }
+
+        if (fileInfo.size === 0) {
+          throw new Error('Le fichier audio est vide');
+        }
+
+        if (fileInfo.size > MAX_FILE_SIZE) {
+          throw new Error('Le fichier audio est trop volumineux. La taille maximale est de 25 Mo.');
+        }
+
+        formData.append('file', {
+          uri: audioUri,
+          type: 'audio/m4a',
+          name: 'audio.m4a'
+        } as any);
+
+      } catch (error: any) {
+        console.error('Error processing audio file:', error);
+        throw new Error('Erreur lors du traitement du fichier audio sur mobile.');
+      }
+    }
+
+    formData.append('model', model);
+
+    const maxRetries = 3;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetch('https://gilardinservice.shop/api/whisper', {
+          method: 'POST',
+          headers: {
+            'X-API-KEY': apiKey,
+          },
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(
+            `API request failed with status ${response.status}: ${errorData.error?.message || 'Unknown error'}`
+          );
+        }
+
+        const transcriptionResponse = await response.json();
+        
+        if (!transcriptionResponse || !transcriptionResponse.transcription) {
+          throw new Error('Aucune transcription reçue de l\'API.');
+        }
+
+        return transcriptionResponse.transcription;
+
+      } catch (error: any) {
+        console.error(`Attempt ${attempt} failed:`, error);
+        lastError = error;
+
+        const isNetworkError = error.message.includes('Network') || 
+                             error.message.includes('ECONNREFUSED') ||
+                             error.message.includes('timeout');
+
+        if (!isNetworkError || attempt === maxRetries) {
+          break;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+      }
+    }
+
+    if (lastError) {
+      if (lastError.status === 401) {
+        throw new Error('Erreur d\'authentification API. Veuillez vérifier votre clé API.');
+      } else if (lastError.status === 429) {
+        throw new Error('Limite de requêtes API atteinte. Veuillez réessayer plus tard.');
+      } else if (lastError.message.includes('Network')) {
+        throw new Error('Erreur de connexion réseau. Veuillez vérifier votre connexion internet.');
+      } else if (lastError.message.includes('413')) {
+        throw new Error('Le fichier audio est trop volumineux. Veuillez réduire sa taille.');
+      }
+      
+      throw new Error(`Erreur lors de la transcription: ${lastError.message}`);
+    }
+
+    throw new Error('Échec de la transcription après plusieurs tentatives.');
+
+  } catch (error: any) {
+    console.error('Remote transcription error:', error);
+    throw error instanceof Error ? error : new Error('Erreur inconnue lors de la transcription.');
+  }
+}
+
 export async function transcribeAudio(uri: string, speakers: any[]): Promise<{ transcript: string; words: any[] }> {
   if (!apiKey) {
     throw new Error('Clé API OpenAI invalide ou manquante. Veuillez vérifier votre configuration.');
@@ -215,7 +339,7 @@ export async function generateSummary(transcript: string): Promise<string> {
       messages: [
         {
           role: 'system',
-          content: 'Tu es un assistant expert en résumé de texte. Génère un résumé concis et structuré du texte fourni en français. Le résumé doit être clair, précis et capturer les points essentiels du texte original.',
+          content: 'Tu es un assistant expert en résumé de texte. Génère un résumé concis et structuré du texte fourni en français. Le résumé doit être clair, précis et capturer les points essentiels du texte original. Limite le résumé à 3-5 lignes maximum.',
         },
         {
           role: 'user',
@@ -223,7 +347,7 @@ export async function generateSummary(transcript: string): Promise<string> {
         },
       ],
       temperature: 0.3,
-      max_tokens: 500,
+      max_tokens: 200,
     });
 
     const summary = completion.choices[0]?.message?.content;

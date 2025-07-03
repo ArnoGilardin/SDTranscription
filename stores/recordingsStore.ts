@@ -25,14 +25,22 @@ export interface Recording {
   currentSpeakerId?: string;
 }
 
+export interface TranscriptionSettings {
+  mode: 'local' | 'remote';
+  remoteApiKey: string;
+  model: 'small' | 'medium';
+}
+
 interface RecordingsState {
   recordings: Recording[];
+  transcriptionSettings: TranscriptionSettings;
   addRecording: (recording: Recording) => void;
   deleteRecording: (id: string) => void;
   updateTranscript: (id: string, transcript: string, words?: Word[]) => void;
   updateSummary: (id: string, summary: string) => void;
   addSpeaker: (recordingId: string, speaker: Speaker) => void;
   updateCurrentSpeaker: (recordingId: string, speakerId: string) => void;
+  updateTranscriptionSettings: (settings: Partial<TranscriptionSettings>) => void;
 }
 
 const DEFAULT_COLORS = [
@@ -48,6 +56,11 @@ const DEFAULT_COLORS = [
 
 export const useRecordingsStore = create<RecordingsState>((set) => ({
   recordings: [],
+  transcriptionSettings: {
+    mode: 'remote',
+    remoteApiKey: '',
+    model: 'small',
+  },
   addRecording: (recording) =>
     set((state) => ({
       recordings: [{
@@ -94,5 +107,9 @@ export const useRecordingsStore = create<RecordingsState>((set) => ({
       recordings: state.recordings.map((r) =>
         r.id === recordingId ? { ...r, currentSpeakerId: speakerId } : r
       ),
+    })),
+  updateTranscriptionSettings: (settings) =>
+    set((state) => ({
+      transcriptionSettings: { ...state.transcriptionSettings, ...settings },
     })),
 }));

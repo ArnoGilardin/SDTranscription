@@ -1,7 +1,8 @@
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { ChevronRight, Globe as Globe2 } from 'lucide-react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { ChevronRight, Globe as Globe2, Settings as SettingsIcon, Key, Cpu } from 'lucide-react-native';
 import { useState } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useRecordingsStore } from '@/stores/recordingsStore';
 import { Language } from '@/types/i18n';
 import { THEME } from '@/constants/theme';
 
@@ -10,16 +11,108 @@ const LANGUAGES = [
   { code: 'fr' as Language, name: 'French', nativeName: 'Français' }
 ];
 
+const TRANSCRIPTION_MODES = [
+  { value: 'remote' as const, label: 'API Distante', description: 'Utilise l\'API gilardinservice.shop' },
+  { value: 'local' as const, label: 'OpenAI Whisper', description: 'Utilise l\'API OpenAI directement' }
+];
+
+const MODELS = [
+  { value: 'small' as const, label: 'Small', description: 'Plus rapide, moins précis' },
+  { value: 'medium' as const, label: 'Medium', description: 'Plus lent, plus précis' }
+];
+
 export default function SettingsScreen() {
   const { language, setLanguage, t } = useLanguage();
+  const { transcriptionSettings, updateTranscriptionSettings } = useRecordingsStore();
   const [showLanguageModal, setShowLanguageModal] = useState(false);
+  const [showTranscriptionModal, setShowTranscriptionModal] = useState(false);
+  const [showModelModal, setShowModelModal] = useState(false);
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [tempApiKey, setTempApiKey] = useState(transcriptionSettings.remoteApiKey);
 
   const currentLanguage = LANGUAGES.find(lang => lang.code === language);
+  const currentMode = TRANSCRIPTION_MODES.find(mode => mode.value === transcriptionSettings.mode);
+  const currentModel = MODELS.find(model => model.value === transcriptionSettings.model);
+
+  const handleSaveApiKey = () => {
+    if (!tempApiKey.trim()) {
+      Alert.alert('Erreur', 'Veuillez saisir une clé API valide');
+      return;
+    }
+    updateTranscriptionSettings({ remoteApiKey: tempApiKey.trim() });
+    setShowApiKeyModal(false);
+    Alert.alert('Succès', 'Clé API sauvegardée avec succès');
+  };
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>{t('settings.title')}</Text>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Transcription</Text>
+
+        <TouchableOpacity 
+          style={styles.settingItem}
+          onPress={() => setShowTranscriptionModal(true)}
+        >
+          <View style={styles.settingLeft}>
+            <View style={styles.iconContainer}>
+              <SettingsIcon size={20} color={THEME.colors.accent} />
+            </View>
+            <Text style={styles.settingText}>Mode de transcription</Text>
+          </View>
+          <View style={styles.settingRight}>
+            <Text style={styles.settingValue}>
+              {currentMode?.label}
+            </Text>
+            <ChevronRight size={20} color={THEME.colors.text} />
+          </View>
+        </TouchableOpacity>
+
+        {transcriptionSettings.mode === 'remote' && (
+          <TouchableOpacity 
+            style={styles.settingItem}
+            onPress={() => setShowModelModal(true)}
+          >
+            <View style={styles.settingLeft}>
+              <View style={styles.iconContainer}>
+                <Cpu size={20} color={THEME.colors.accent} />
+              </View>
+              <Text style={styles.settingText}>Modèle</Text>
+            </View>
+            <View style={styles.settingRight}>
+              <Text style={styles.settingValue}>
+                {currentModel?.label}
+              </Text>
+              <ChevronRight size={20} color={THEME.colors.text} />
+            </View>
+          </TouchableOpacity>
+        )}
+
+        {transcriptionSettings.mode === 'remote' && (
+          <TouchableOpacity 
+            style={styles.settingItem}
+            onPress={() => {
+              setTempApiKey(transcriptionSettings.remoteApiKey);
+              setShowApiKeyModal(true);
+            }}
+          >
+            <View style={styles.settingLeft}>
+              <View style={styles.iconContainer}>
+                <Key size={20} color={THEME.colors.accent} />
+              </View>
+              <Text style={styles.settingText}>Clé API</Text>
+            </View>
+            <View style={styles.settingRight}>
+              <Text style={styles.settingValue}>
+                {transcriptionSettings.remoteApiKey ? '••••••••' : 'Non configurée'}
+              </Text>
+              <ChevronRight size={20} color={THEME.colors.text} />
+            </View>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.section}>
@@ -63,6 +156,7 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      {/* Language Modal */}
       {showLanguageModal && (
         <View style={styles.modalOverlay}>
           <View style={styles.modal}>
@@ -88,6 +182,106 @@ export default function SettingsScreen() {
             >
               <Text style={styles.closeButtonText}>{t('settings.cancel')}</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Transcription Mode Modal */}
+      {showTranscriptionModal && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>Mode de transcription</Text>
+            {TRANSCRIPTION_MODES.map((mode) => (
+              <TouchableOpacity
+                key={mode.value}
+                style={styles.optionItem}
+                onPress={() => {
+                  updateTranscriptionSettings({ mode: mode.value });
+                  setShowTranscriptionModal(false);
+                }}
+              >
+                <View style={styles.optionContent}>
+                  <Text style={styles.optionLabel}>{mode.label}</Text>
+                  <Text style={styles.optionDescription}>{mode.description}</Text>
+                </View>
+                {transcriptionSettings.mode === mode.value && (
+                  <View style={styles.selectedIndicator} />
+                )}
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowTranscriptionModal(false)}
+            >
+              <Text style={styles.closeButtonText}>Annuler</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Model Modal */}
+      {showModelModal && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>Modèle de transcription</Text>
+            {MODELS.map((model) => (
+              <TouchableOpacity
+                key={model.value}
+                style={styles.optionItem}
+                onPress={() => {
+                  updateTranscriptionSettings({ model: model.value });
+                  setShowModelModal(false);
+                }}
+              >
+                <View style={styles.optionContent}>
+                  <Text style={styles.optionLabel}>{model.label}</Text>
+                  <Text style={styles.optionDescription}>{model.description}</Text>
+                </View>
+                {transcriptionSettings.model === model.value && (
+                  <View style={styles.selectedIndicator} />
+                )}
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowModelModal(false)}
+            >
+              <Text style={styles.closeButtonText}>Annuler</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* API Key Modal */}
+      {showApiKeyModal && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>Clé API de transcription</Text>
+            <Text style={styles.modalDescription}>
+              Saisissez votre clé API pour l'API de transcription distante
+            </Text>
+            <TextInput
+              style={styles.textInput}
+              value={tempApiKey}
+              onChangeText={setTempApiKey}
+              placeholder="Votre clé API..."
+              placeholderTextColor={THEME.colors.text}
+              secureTextEntry
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setShowApiKeyModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.saveButton]}
+                onPress={handleSaveApiKey}
+              >
+                <Text style={styles.saveButtonText}>Sauvegarder</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       )}
@@ -176,6 +370,11 @@ const styles = StyleSheet.create({
     marginBottom: THEME.spacing.md,
     textAlign: 'center',
   },
+  modalDescription: {
+    ...THEME.typography.caption,
+    marginBottom: THEME.spacing.md,
+    textAlign: 'center',
+  },
   languageOption: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -187,11 +386,62 @@ const styles = StyleSheet.create({
   languageName: {
     ...THEME.typography.body,
   },
+  optionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: THEME.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: THEME.colors.cardBorder,
+  },
+  optionContent: {
+    flex: 1,
+  },
+  optionLabel: {
+    ...THEME.typography.body,
+    marginBottom: THEME.spacing.xs,
+  },
+  optionDescription: {
+    ...THEME.typography.caption,
+  },
   selectedIndicator: {
     width: 8,
     height: 8,
     borderRadius: THEME.borderRadius.full,
     backgroundColor: THEME.colors.accent,
+  },
+  textInput: {
+    ...THEME.typography.body,
+    backgroundColor: THEME.colors.background,
+    borderRadius: THEME.borderRadius.md,
+    padding: THEME.spacing.md,
+    marginBottom: THEME.spacing.md,
+    borderWidth: 1,
+    borderColor: THEME.colors.cardBorder,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: THEME.spacing.sm,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: THEME.spacing.md,
+    borderRadius: THEME.borderRadius.md,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: THEME.colors.background,
+  },
+  saveButton: {
+    backgroundColor: THEME.colors.accent,
+  },
+  cancelButtonText: {
+    ...THEME.typography.button,
+    color: THEME.colors.text,
+  },
+  saveButtonText: {
+    ...THEME.typography.button,
+    color: '#FFF',
   },
   closeButton: {
     marginTop: THEME.spacing.md,

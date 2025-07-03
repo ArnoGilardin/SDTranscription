@@ -1,8 +1,8 @@
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Platform, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Platform, ScrollView, Alert } from 'react-native';
 import { FileText, RefreshCcw, Download, Share2, Play, Pause } from 'lucide-react-native';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useRecordingsStore } from '@/stores/recordingsStore';
-import { transcribeAudio } from '@/utils/openai';
+import { transcribeAudio, transcribeAudioRemote } from '@/utils/openai';
 import { useState, useRef, useEffect } from 'react';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -14,9 +14,11 @@ import Animated, {
 } from 'react-native-reanimated';
 import { THEME } from '@/constants/theme';
 
+const UPLOADS_DIRECTORY = `${FileSystem.documentDirectory}uploads/`;
+
 export default function TranscriptsScreen() {
   const { t } = useLanguage();
-  const { recordings, updateTranscript } = useRecordingsStore();
+  const { recordings, updateTranscript, transcriptionSettings } = useRecordingsStore();
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
@@ -28,6 +30,20 @@ export default function TranscriptsScreen() {
   const eventListenersRef = useRef<{ [key: string]: EventListener }>({});
 
   useEffect(() => {
+    // Create uploads directory if it doesn't exist
+    (async () => {
+      if (Platform.OS !== 'web') {
+        try {
+          const dirInfo = await FileSystem.getInfoAsync(UPLOADS_DIRECTORY);
+          if (!dirInfo.exists) {
+            await FileSystem.makeDirectoryAsync(UPLOADS_DIRECTORY, { intermediates: true });
+          }
+        } catch (error) {
+          console.error('Error creating uploads directory:', error);
+        }
+      }
+    })();
+
     return () => {
       if (audioRef.current) {
         Object.entries(eventListenersRef.current).forEach(([event, listener]) => {
@@ -38,6 +54,25 @@ export default function TranscriptsScreen() {
       }
     };
   }, []);
+
+  const saveTranscriptToFile = async (recording: any, transcript: string) => {
+    if (Platform.OS === 'web') {
+      return; // Skip file saving on web for now
+    }
+
+    try {
+      const fileName = `${recording.title.replace(/[^a-zA-Z0-9]/g, '_')}.txt`;
+      const filePath = `${UPLOADS_DIRECTORY}${fileName}`;
+      
+      await FileSystem.writeAsStringAsync(filePath, transcript, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+      
+      console.log(`Transcript saved to: ${filePath}`);
+    } catch (error) {
+      console.error('Error saving transcript to file:', error);
+    }
+  };
 
   const handlePlayPause = async (recording: any) => {
     try {
@@ -125,10 +160,32 @@ export default function TranscriptsScreen() {
         }
       }
 
-      const transcript = await transcribeAudio(uri);
+      let transcript: string;
+
+      if (transcriptionSettings.mode === 'remote') {
+        if (!transcriptionSettings.remoteApiKey) {
+          throw new Error('Clé API manquante. Veuillez configurer votre clé API dans les paramètres.');
+        }
+        
+        transcript = await transcribeAudioRemote(
+          uri, 
+          transcriptionSettings.remoteApiKey, 
+          transcriptionSettings.model
+        );
+      } else {
+        const recording = recordings.find(r => r.id === id);
+        const result = await transcribeAudio(uri, recording?.speakers || []);
+        transcript = result.transcript;
+      }
       
       if (!transcript) {
         throw new Error('No transcription generated');
+      }
+
+      // Save transcript to local file
+      const recording = recordings.find(r => r.id === id);
+      if (recording) {
+        await saveTranscriptToFile(recording, transcript);
       }
 
       const words = transcript.split(' ').map((word, index) => ({
@@ -208,15 +265,38 @@ export default function TranscriptsScreen() {
     }
   };
 
+  const getTranscriptionModeText = () => {
+    if (transcriptionSettings.mode === 'remote') {
+      return `API Distante (${transcriptionSettings.model})`;
+    }
+    return 'OpenAI Whisper';
+  };
+
+  const canTranscribe = () => {
+    if (transcriptionSettings.mode === 'remote') {
+      return !!transcriptionSettings.remoteApiKey;
+    }
+    return true; // OpenAI mode always available if API key is set
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>{t('transcripts.title')}</Text>
+        <Text style={styles.subtitle}>Mode: {getTranscriptionModeText()}</Text>
       </View>
 
       {error && (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{error}</Text>
+        </View>
+      )}
+
+      {!canTranscribe() && (
+        <View style={styles.warningContainer}>
+          <Text style={styles.warningText}>
+            Veuillez configurer votre clé API dans les paramètres pour utiliser la transcription.
+          </Text>
         </View>
       )}
 
@@ -285,9 +365,12 @@ export default function TranscriptsScreen() {
                 </>
               ) : (
                 <TouchableOpacity
-                  style={styles.transcribeButton}
+                  style={[
+                    styles.transcribeButton,
+                    !canTranscribe() && styles.transcribeButtonDisabled
+                  ]}
                   onPress={() => handleTranscribe(item.id, item.uri)}
-                  disabled={processingId === item.id}>
+                  disabled={processingId === item.id || !canTranscribe()}>
                   {processingId === item.id ? (
                     <>
                       <ActivityIndicator size="small" color={THEME.colors.accent} style={styles.loader} />
@@ -297,8 +380,11 @@ export default function TranscriptsScreen() {
                     </>
                   ) : (
                     <>
-                      <RefreshCcw size={16} color={THEME.colors.accent} />
-                      <Text style={styles.transcribeText}>
+                      <RefreshCcw size={16} color={canTranscribe() ? THEME.colors.accent : THEME.colors.text} />
+                      <Text style={[
+                        styles.transcribeText,
+                        !canTranscribe() && styles.transcribeTextDisabled
+                      ]}>
                         {t('transcripts.generateTranscript')}
                       </Text>
                     </>
@@ -332,6 +418,10 @@ const styles = StyleSheet.create({
   title: {
     ...THEME.typography.h1,
   },
+  subtitle: {
+    ...THEME.typography.caption,
+    marginTop: THEME.spacing.xs,
+  },
   errorContainer: {
     margin: THEME.spacing.md,
     padding: THEME.spacing.md,
@@ -341,6 +431,19 @@ const styles = StyleSheet.create({
   errorText: {
     ...THEME.typography.body,
     color: THEME.colors.error,
+    textAlign: 'center',
+  },
+  warningContainer: {
+    margin: THEME.spacing.md,
+    padding: THEME.spacing.md,
+    backgroundColor: '#F59E0B20',
+    borderRadius: THEME.borderRadius.md,
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+  warningText: {
+    ...THEME.typography.body,
+    color: '#F59E0B',
     textAlign: 'center',
   },
   listContent: {
@@ -434,10 +537,16 @@ const styles = StyleSheet.create({
     borderRadius: THEME.borderRadius.md,
     alignSelf: 'flex-start',
   },
+  transcribeButtonDisabled: {
+    opacity: 0.5,
+  },
   transcribeText: {
     ...THEME.typography.button,
     color: THEME.colors.accent,
     marginLeft: THEME.spacing.sm,
+  },
+  transcribeTextDisabled: {
+    color: THEME.colors.text,
   },
   processingText: {
     ...THEME.typography.button,
