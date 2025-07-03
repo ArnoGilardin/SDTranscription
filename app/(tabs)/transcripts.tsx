@@ -221,21 +221,20 @@ export default function TranscriptsScreen() {
       setError(null);
 
       // Check if this is a Base64 encoded audio (web recording)
-      let audioUri = uri;
-      let audioBlob: Blob | null = null;
+      let audioData: string | Blob = uri;
 
       if (Platform.OS === 'web' && uri.startsWith('data:')) {
         // Convert Base64 to Blob for transcription
         try {
-          audioBlob = base64ToBlob(uri);
+          const audioBlob = base64ToBlob(uri);
           
           // Check file size (25MB limit)
           if (audioBlob.size > 25 * 1024 * 1024) {
             throw new Error('Le fichier audio est trop volumineux. La taille maximale est de 25 Mo.');
           }
           
-          // Create a temporary blob URL for the transcription API
-          audioUri = URL.createObjectURL(audioBlob);
+          // Pass the blob directly to transcription functions
+          audioData = audioBlob;
         } catch (error) {
           console.error('Error processing Base64 audio:', error);
           throw new Error('Erreur lors du traitement de l\'enregistrement audio.');
@@ -245,6 +244,7 @@ export default function TranscriptsScreen() {
         if (!fileInfo.exists) {
           throw new Error('Audio file not found');
         }
+        audioData = uri;
       }
 
       let transcript: string;
@@ -255,19 +255,14 @@ export default function TranscriptsScreen() {
         }
         
         transcript = await transcribeAudioRemote(
-          audioUri, 
+          audioData, 
           transcriptionSettings.remoteApiKey, 
           transcriptionSettings.model
         );
       } else {
         const recording = recordings.find(r => r.id === id);
-        const result = await transcribeAudio(audioUri, recording?.speakers || []);
+        const result = await transcribeAudio(audioData, recording?.speakers || []);
         transcript = result.transcript;
-      }
-      
-      // Clean up temporary blob URL if created
-      if (Platform.OS === 'web' && uri.startsWith('data:') && audioUri !== uri) {
-        URL.revokeObjectURL(audioUri);
       }
       
       if (!transcript) {

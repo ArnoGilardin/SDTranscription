@@ -11,7 +11,7 @@ const openai = new OpenAI({
 });
 
 export async function transcribeAudioRemote(
-  uri: string, 
+  audioData: string | Blob, 
   apiKey: string, 
   model: 'small' | 'medium' = 'small'
 ): Promise<string> {
@@ -26,14 +26,16 @@ export async function transcribeAudioRemote(
       try {
         let audioBlob: Blob;
         
-        // Check if it's a Base64 data URL
-        if (uri.startsWith('data:')) {
+        // If audioData is already a Blob, use it directly
+        if (audioData instanceof Blob) {
+          audioBlob = audioData;
+        } else if (typeof audioData === 'string' && audioData.startsWith('data:')) {
           // Convert Base64 to Blob
-          const response = await fetch(uri);
+          const response = await fetch(audioData);
           audioBlob = await response.blob();
         } else {
           // Regular URL
-          const response = await fetch(uri);
+          const response = await fetch(audioData as string);
           if (!response.ok) {
             throw new Error(`Failed to fetch audio file: ${response.statusText}`);
           }
@@ -51,6 +53,7 @@ export async function transcribeAudioRemote(
       }
     } else {
       try {
+        const uri = audioData as string;
         const fileInfo = await FileSystem.getInfoAsync(uri);
         if (!fileInfo.exists) {
           throw new Error('Le fichier audio est introuvable');
@@ -171,7 +174,7 @@ export async function transcribeAudioRemote(
   }
 }
 
-export async function transcribeAudio(uri: string, speakers: any[]): Promise<{ transcript: string; words: any[] }> {
+export async function transcribeAudio(audioData: string | Blob, speakers: any[]): Promise<{ transcript: string; words: any[] }> {
   if (!apiKey) {
     throw new Error('Clé API OpenAI invalide ou manquante. Veuillez vérifier votre configuration.');
   }
@@ -183,14 +186,16 @@ export async function transcribeAudio(uri: string, speakers: any[]): Promise<{ t
       try {
         let audioBlob: Blob;
         
-        // Check if it's a Base64 data URL
-        if (uri.startsWith('data:')) {
+        // If audioData is already a Blob, use it directly
+        if (audioData instanceof Blob) {
+          audioBlob = audioData;
+        } else if (typeof audioData === 'string' && audioData.startsWith('data:')) {
           // Convert Base64 to Blob
-          const response = await fetch(uri);
+          const response = await fetch(audioData);
           audioBlob = await response.blob();
         } else {
           // Regular URL
-          const response = await fetch(uri);
+          const response = await fetch(audioData as string);
           if (!response.ok) {
             throw new Error(`Failed to fetch audio file: ${response.statusText}`);
           }
@@ -208,6 +213,7 @@ export async function transcribeAudio(uri: string, speakers: any[]): Promise<{ t
       }
     } else {
       try {
+        const uri = audioData as string;
         const fileInfo = await FileSystem.getInfoAsync(uri);
         if (!fileInfo.exists) {
           throw new Error('Le fichier audio est introuvable');
