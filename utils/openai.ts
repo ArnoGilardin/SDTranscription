@@ -65,7 +65,7 @@ export async function transcribeAudioRemote(
         formData.append('file', audioBlob, 'audio.m4a');
       } catch (error) {
         console.error('Error fetching audio file:', error);
-        throw new Error('Impossible d\'accéder au fichier audio sur le web.');
+        throw new Error('Impossible d\'accéder au fichier audio sur le web. Les enregistrements web sont temporaires et ne persistent pas après le rechargement de la page. Veuillez réenregistrer votre audio.');
       }
     } else {
       try {
@@ -212,7 +212,7 @@ export async function transcribeAudio(uri: string, speakers: any[]): Promise<{ t
         formData.append('file', audioBlob, 'audio.m4a');
       } catch (error) {
         console.error('Error fetching audio file:', error);
-        throw new Error('Impossible d\'accéder au fichier audio sur le web.');
+        throw new Error('Impossible d\'accéder au fichier audio sur le web. Les enregistrements web sont temporaires et ne persistent pas après le rechargement de la page. Veuillez réenregistrer votre audio.');
       }
     } else {
       try {
