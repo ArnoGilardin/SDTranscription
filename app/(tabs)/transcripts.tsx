@@ -44,23 +44,78 @@ export default function TranscriptsScreen() {
       }
     })();
 
+    // Initialize audio element once
+    if (Platform.OS === 'web' && !audioRef.current) {
+      audioRef.current = new Audio();
+      setupAudioEventListeners();
+    }
+
     return () => {
       cleanupAudio();
     };
   }, []);
 
+  const setupAudioEventListeners = () => {
+    if (!audioRef.current) return;
+
+    const handleTimeUpdate = () => {
+      if (!audioRef.current) return;
+      currentTimeRef.current = audioRef.current.currentTime;
+      const progress = (audioRef.current.currentTime / audioRef.current.duration) * 100;
+      if (!isNaN(progress)) {
+        progressValue.value = withTiming(progress);
+      }
+    };
+
+    const handleEnded = () => {
+      setPlayingId(null);
+      setIsPlaying(false);
+      progressValue.value = withTiming(0);
+    };
+
+    const handleError = (e: Event) => {
+      console.error('Audio playback error:', e);
+      setError(t('transcripts.playbackError'));
+      setPlayingId(null);
+      setIsPlaying(false);
+    };
+
+    const handleLoadedData = () => {
+      // Audio is ready to play
+      if (audioRef.current && isPlaying) {
+        audioRef.current.play().catch((error) => {
+          console.error('Playback error:', error);
+          setError(t('transcripts.playbackError'));
+          setPlayingId(null);
+          setIsPlaying(false);
+        });
+      }
+    };
+
+    // Store event listeners for cleanup
+    eventListenersRef.current = {
+      timeupdate: handleTimeUpdate as EventListener,
+      ended: handleEnded as EventListener,
+      error: handleError as EventListener,
+      loadeddata: handleLoadedData as EventListener,
+    };
+
+    // Add event listeners
+    Object.entries(eventListenersRef.current).forEach(([event, listener]) => {
+      audioRef.current?.addEventListener(event, listener);
+    });
+  };
+
   const cleanupAudio = () => {
     if (audioRef.current) {
-      // Remove event listeners first
+      // Remove event listeners
       Object.entries(eventListenersRef.current).forEach(([event, listener]) => {
         audioRef.current?.removeEventListener(event, listener);
       });
       
-      // Properly cleanup the audio element
+      // Pause and clear source, but keep the audio element
       audioRef.current.pause();
       audioRef.current.src = '';
-      audioRef.current.load();
-      audioRef.current = null;
       
       // Clear event listeners reference
       eventListenersRef.current = {};
@@ -88,65 +143,33 @@ export default function TranscriptsScreen() {
 
   const handlePlayPause = async (recording: any) => {
     try {
-      if (playingId === recording.id && isPlaying && audioRef.current) {
+      if (!audioRef.current) {
+        console.error('Audio element not initialized');
+        return;
+      }
+
+      // If the same recording is playing, pause it
+      if (playingId === recording.id && isPlaying) {
         audioRef.current.pause();
         setIsPlaying(false);
         return;
       }
 
-      // Cleanup existing audio properly
-      cleanupAudio();
-
-      // Create new audio instance
-      const audio = new Audio(recording.uri);
-      
-      // Create event listeners
-      const handleTimeUpdate = () => {
-        if (!audio) return;
-        currentTimeRef.current = audio.currentTime;
-        const progress = (audio.currentTime / audio.duration) * 100;
-        if (!isNaN(progress)) {
-          progressValue.value = withTiming(progress);
-        }
-      };
-
-      const handleEnded = () => {
-        setPlayingId(null);
+      // Stop current playback if different recording
+      if (isPlaying) {
+        audioRef.current.pause();
         setIsPlaying(false);
         progressValue.value = withTiming(0);
-      };
-
-      const handleError = (e: Event) => {
-        console.error('Audio playback error:', e);
-        setError(t('transcripts.playbackError'));
-        setPlayingId(null);
-        setIsPlaying(false);
-      };
-
-      // Store event listeners for cleanup
-      eventListenersRef.current = {
-        timeupdate: handleTimeUpdate as EventListener,
-        ended: handleEnded as EventListener,
-        error: handleError as EventListener,
-      };
-
-      // Add event listeners
-      Object.entries(eventListenersRef.current).forEach(([event, listener]) => {
-        audio.addEventListener(event, listener);
-      });
-
-      audioRef.current = audio;
-      
-      try {
-        await audio.play();
-        setPlayingId(recording.id);
-        setIsPlaying(true);
-      } catch (error) {
-        console.error('Playback error:', error);
-        setError(t('transcripts.playbackError'));
-        setPlayingId(null);
-        setIsPlaying(false);
       }
+
+      // Load new audio source
+      audioRef.current.src = recording.uri;
+      audioRef.current.load();
+      
+      setPlayingId(recording.id);
+      setIsPlaying(true);
+      
+      // The actual play will be triggered by the loadeddata event listener
     } catch (error) {
       console.error('Error playing sound:', error);
       setError(t('transcripts.playbackError'));
