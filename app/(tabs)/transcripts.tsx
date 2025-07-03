@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Platform, ScrollView, Alert } from 'react-native';
-import { FileText, RefreshCcw, Download, Share2, Play, Pause, TriangleAlert as AlertTriangle } from 'lucide-react-native';
+import { FileText, RefreshCcw, Download, Share2, Play, Pause, TriangleAlert as AlertTriangle, Settings } from 'lucide-react-native';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useRecordingsStore } from '@/stores/recordingsStore';
 import { transcribeAudio, transcribeAudioRemote } from '@/utils/openai';
@@ -13,6 +13,7 @@ import Animated, {
   useSharedValue,
 } from 'react-native-reanimated';
 import { THEME } from '@/constants/theme';
+import { router } from 'expo-router';
 
 const UPLOADS_DIRECTORY = `${FileSystem.documentDirectory}uploads/`;
 
@@ -92,13 +93,19 @@ export default function TranscriptsScreen() {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
         
-        const response = await fetch('https://gilardinservice.shop/health', {
+        const response = await fetch('https://gilardinservice.shop/api/whisper', {
           method: 'GET',
+          mode: 'cors',
+          headers: {
+            'Accept': 'application/json',
+          },
           signal: controller.signal,
         });
         
         clearTimeout(timeoutId);
-        setServiceStatus(response.ok ? 'available' : 'unavailable');
+        // If we get a 405 (Method Not Allowed), the service is reachable but doesn't support GET
+        // This is actually a good sign - the service exists
+        setServiceStatus(response.status === 405 || response.ok ? 'available' : 'unavailable');
       } catch (error) {
         console.log('Service health check failed:', error);
         setServiceStatus('unavailable');
@@ -319,8 +326,9 @@ export default function TranscriptsScreen() {
       // Check for specific network-related errors
       if (errorMessage.includes('Failed to fetch') || 
           errorMessage.includes('Network') ||
-          errorMessage.includes('connexion')) {
-        errorMessage = 'Problème de connexion au service de transcription. Vérifiez votre connexion internet ou essayez le mode local.';
+          errorMessage.includes('connexion') ||
+          errorMessage.includes('CORS')) {
+        errorMessage = 'Problème de connexion au service de transcription. Le service semble avoir des problèmes de configuration CORS. Veuillez essayer le mode local.';
         
         // Update service status
         setServiceStatus('unavailable');
@@ -413,16 +421,27 @@ export default function TranscriptsScreen() {
 
   const getServiceStatusMessage = () => {
     if (transcriptionSettings.mode === 'remote' && serviceStatus === 'unavailable') {
-      return 'Le service de transcription distant est actuellement indisponible. Vous pouvez essayer le mode local ou réessayer plus tard.';
+      return 'Le service de transcription distant est actuellement indisponible ou mal configuré (problème CORS). Vous pouvez essayer le mode local ou réessayer plus tard.';
     }
     return null;
+  };
+
+  const navigateToSettings = () => {
+    router.push('/(tabs)/settings');
   };
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>{t('transcripts.title')}</Text>
-        <Text style={styles.subtitle}>Mode: {getTranscriptionModeText()}</Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.subtitle}>Mode: {getTranscriptionModeText()}</Text>
+          <TouchableOpacity 
+            style={styles.settingsButton}
+            onPress={navigateToSettings}>
+            <Settings size={20} color={THEME.colors.accent} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {error && (
@@ -579,9 +598,20 @@ const styles = StyleSheet.create({
   title: {
     ...THEME.typography.h1,
   },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: THEME.spacing.xs,
+  },
   subtitle: {
     ...THEME.typography.caption,
-    marginTop: THEME.spacing.xs,
+    flex: 1,
+  },
+  settingsButton: {
+    padding: THEME.spacing.sm,
+    borderRadius: THEME.borderRadius.full,
+    backgroundColor: THEME.colors.background,
   },
   errorContainer: {
     margin: THEME.spacing.md,

@@ -16,13 +16,18 @@ async function checkApiHealth(apiUrl: string): Promise<boolean> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout for health check
     
-    const response = await fetch(apiUrl.replace('/api/whisper', '/health'), {
+    // Try a simple GET request to check if the service is reachable
+    const response = await fetch(apiUrl, {
       method: 'GET',
+      mode: 'cors', // Explicitly set CORS mode
+      headers: {
+        'Accept': 'application/json',
+      },
       signal: controller.signal,
     });
     
     clearTimeout(timeoutId);
-    return response.ok;
+    return response.status !== 405; // 405 means method not allowed, but service is reachable
   } catch (error) {
     console.log('API health check failed:', error);
     return false;
@@ -41,7 +46,7 @@ export async function transcribeAudioRemote(
   const apiUrl = 'https://gilardinservice.shop/api/whisper';
   
   // Check API health first
-  const isApiHealthy = await checkApiHealth('https://gilardinservice.shop');
+  const isApiHealthy = await checkApiHealth(apiUrl);
   if (!isApiHealthy) {
     throw new Error('Le service de transcription est temporairement indisponible. Veuillez réessayer plus tard ou utiliser le mode local.');
   }
@@ -120,8 +125,10 @@ export async function transcribeAudioRemote(
 
         const response = await fetch(apiUrl, {
           method: 'POST',
+          mode: 'cors', // Explicitly set CORS mode
           headers: {
             'X-API-KEY': apiKey,
+            // Don't set Content-Type for FormData, let the browser set it
           },
           body: formData,
           signal: controller.signal,
@@ -145,6 +152,8 @@ export async function transcribeAudioRemote(
             throw new Error('SERVICE_NOT_FOUND');
           } else if (response.status === 401 || response.status === 403) {
             throw new Error('AUTHENTICATION_ERROR');
+          } else if (response.status === 405) {
+            throw new Error('METHOD_NOT_ALLOWED');
           }
           
           throw new Error(
@@ -167,6 +176,7 @@ export async function transcribeAudioRemote(
         // Check for specific error types that shouldn't be retried
         if (error.message === 'AUTHENTICATION_ERROR' || 
             error.message === 'SERVICE_NOT_FOUND' ||
+            error.message === 'METHOD_NOT_ALLOWED' ||
             error.message.includes('413') || 
             error.message.includes('Payload Too Large')) {
           break; // Don't retry these errors
@@ -198,6 +208,8 @@ export async function transcribeAudioRemote(
         throw new Error('Erreur d\'authentification API. Veuillez vérifier votre clé API dans les paramètres.');
       } else if (lastError.message === 'SERVICE_NOT_FOUND') {
         throw new Error('Service de transcription introuvable. Veuillez contacter le support.');
+      } else if (lastError.message === 'METHOD_NOT_ALLOWED') {
+        throw new Error('Configuration du service incorrecte. Veuillez contacter le support technique.');
       } else if (lastError.message === 'SERVICE_UNAVAILABLE') {
         throw new Error('Le service de transcription est temporairement indisponible. Veuillez réessayer plus tard.');
       } else if (lastError.name === 'AbortError' || lastError.message.includes('timeout')) {
