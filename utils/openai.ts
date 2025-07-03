@@ -1,7 +1,6 @@
 import OpenAI from 'openai';
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system';
-import { Audio } from 'expo-av';
 
 const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB in bytes
@@ -10,33 +9,6 @@ const openai = new OpenAI({
   apiKey: apiKey || '',
   dangerouslyAllowBrowser: true
 });
-
-async function compressAudio(uri: string): Promise<string> {
-  if (Platform.OS === 'web') {
-    return uri;
-  }
-
-  try {
-    const fileInfo = await FileSystem.getInfoAsync(uri);
-    if (!fileInfo.exists || fileInfo.size <= MAX_FILE_SIZE) {
-      return uri;
-    }
-
-    const newUri = `${FileSystem.cacheDirectory}compressed_audio.m4a`;
-    
-    const { recording } = await Audio.Recording.createAsync(
-      Audio.RecordingOptionsPresets.LOW_QUALITY,
-      undefined,
-      undefined
-    );
-
-    await recording.stopAndUnloadAsync();
-    return recording.getURI() || uri;
-  } catch (error) {
-    console.error('Error compressing audio:', error);
-    return uri;
-  }
-}
 
 export async function transcribeAudioRemote(
   uri: string, 
@@ -49,27 +21,37 @@ export async function transcribeAudioRemote(
 
   try {
     let formData = new FormData();
-    let audioUri = await compressAudio(uri);
     
     if (Platform.OS === 'web') {
       try {
-        const response = await fetch(audioUri);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch audio file: ${response.statusText}`);
+        let audioBlob: Blob;
+        
+        // Check if it's a Base64 data URL
+        if (uri.startsWith('data:')) {
+          // Convert Base64 to Blob
+          const response = await fetch(uri);
+          audioBlob = await response.blob();
+        } else {
+          // Regular URL
+          const response = await fetch(uri);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch audio file: ${response.statusText}`);
+          }
+          audioBlob = await response.blob();
         }
         
-        const audioBlob = await response.blob();
         if (audioBlob.size > MAX_FILE_SIZE) {
           throw new Error('Le fichier audio est trop volumineux. La taille maximale est de 25 Mo.');
         }
-        formData.append('file', audioBlob, 'audio.m4a');
+        
+        formData.append('file', audioBlob, 'audio.webm');
       } catch (error) {
-        console.error('Error fetching audio file:', error);
-        throw new Error('Impossible d\'accéder au fichier audio sur le web. Les enregistrements web sont temporaires et ne persistent pas après le rechargement de la page. Veuillez réenregistrer votre audio.');
+        console.error('Error processing audio file:', error);
+        throw new Error('Erreur lors du traitement du fichier audio. Veuillez réenregistrer votre audio.');
       }
     } else {
       try {
-        const fileInfo = await FileSystem.getInfoAsync(audioUri);
+        const fileInfo = await FileSystem.getInfoAsync(uri);
         if (!fileInfo.exists) {
           throw new Error('Le fichier audio est introuvable');
         }
@@ -83,7 +65,7 @@ export async function transcribeAudioRemote(
         }
 
         formData.append('file', {
-          uri: audioUri,
+          uri: uri,
           type: 'audio/m4a',
           name: 'audio.m4a'
         } as any);
@@ -196,27 +178,37 @@ export async function transcribeAudio(uri: string, speakers: any[]): Promise<{ t
 
   try {
     let formData = new FormData();
-    let audioUri = await compressAudio(uri);
     
     if (Platform.OS === 'web') {
       try {
-        const response = await fetch(audioUri);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch audio file: ${response.statusText}`);
+        let audioBlob: Blob;
+        
+        // Check if it's a Base64 data URL
+        if (uri.startsWith('data:')) {
+          // Convert Base64 to Blob
+          const response = await fetch(uri);
+          audioBlob = await response.blob();
+        } else {
+          // Regular URL
+          const response = await fetch(uri);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch audio file: ${response.statusText}`);
+          }
+          audioBlob = await response.blob();
         }
         
-        const audioBlob = await response.blob();
         if (audioBlob.size > MAX_FILE_SIZE) {
           throw new Error('Le fichier audio est trop volumineux. La taille maximale est de 25 Mo.');
         }
-        formData.append('file', audioBlob, 'audio.m4a');
+        
+        formData.append('file', audioBlob, 'audio.webm');
       } catch (error) {
-        console.error('Error fetching audio file:', error);
-        throw new Error('Impossible d\'accéder au fichier audio sur le web. Les enregistrements web sont temporaires et ne persistent pas après le rechargement de la page. Veuillez réenregistrer votre audio.');
+        console.error('Error processing audio file:', error);
+        throw new Error('Erreur lors du traitement du fichier audio. Veuillez réenregistrer votre audio.');
       }
     } else {
       try {
-        const fileInfo = await FileSystem.getInfoAsync(audioUri);
+        const fileInfo = await FileSystem.getInfoAsync(uri);
         if (!fileInfo.exists) {
           throw new Error('Le fichier audio est introuvable');
         }
@@ -230,7 +222,7 @@ export async function transcribeAudio(uri: string, speakers: any[]): Promise<{ t
         }
 
         formData.append('file', {
-          uri: audioUri,
+          uri: uri,
           type: 'audio/m4a',
           name: 'audio.m4a'
         } as any);

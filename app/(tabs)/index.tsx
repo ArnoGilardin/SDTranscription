@@ -31,6 +31,16 @@ const DEFAULT_COLORS = [
   '#F97316', // Orange
 ];
 
+// Helper function to convert Blob to Base64
+const blobToBase64 = (blob: Blob): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+};
+
 export default function RecordScreen() {
   const { t } = useLanguage();
   const { addRecording, recordings } = useRecordingsStore();
@@ -229,7 +239,21 @@ export default function RecordScreen() {
         throw new Error('No file selected');
       }
 
-      const savedUri = await saveRecordingToLibrary(asset.uri);
+      let savedUri = asset.uri;
+      
+      // For web, convert to Base64 for persistence
+      if (Platform.OS === 'web') {
+        try {
+          const response = await fetch(asset.uri);
+          const blob = await response.blob();
+          savedUri = await blobToBase64(blob);
+        } catch (error) {
+          console.error('Error converting imported file to Base64:', error);
+          // Keep original URI if conversion fails
+        }
+      } else {
+        savedUri = await saveRecordingToLibrary(asset.uri);
+      }
       
       let durationInSeconds = 0;
       
@@ -279,13 +303,15 @@ export default function RecordScreen() {
       
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        const audioUrl = URL.createObjectURL(audioBlob);
+        
+        // Convert to Base64 for persistence across page reloads
+        const base64Uri = await blobToBase64(audioBlob);
         
         if (currentRecordingId) {
           const newRecording = {
             id: currentRecordingId,
             title: generateTitle(),
-            uri: audioUrl,
+            uri: base64Uri, // Store as Base64 instead of blob URL
             duration,
             date: new Date().toISOString(),
             speakers: [],

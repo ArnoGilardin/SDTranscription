@@ -6,6 +6,21 @@ import { useState, useEffect, useRef } from 'react';
 import { Audio } from 'expo-av';
 import { THEME } from '@/constants/theme';
 
+// Helper function to convert Base64 to Blob URL for web playback
+const base64ToBlobUrl = (base64: string): string => {
+  if (!base64.startsWith('data:')) {
+    return base64; // Not a Base64 string, return as-is
+  }
+  
+  try {
+    const response = fetch(base64);
+    return base64; // For now, return the Base64 directly as it can be used as src
+  } catch (error) {
+    console.error('Error converting Base64 to blob URL:', error);
+    return base64;
+  }
+};
+
 export default function LibraryScreen() {
   const { t } = useLanguage();
   const recordings = useRecordingsStore((state) => state.recordings);
@@ -91,7 +106,7 @@ export default function LibraryScreen() {
     try {
       if (Platform.OS === 'web') {
         if (!webAudioRef.current) {
-          webAudioRef.current = new window.Audio(recording.uri);
+          webAudioRef.current = new window.Audio();
           
           webAudioRef.current.onended = () => {
             setPlayingId(null);
@@ -115,7 +130,7 @@ export default function LibraryScreen() {
             webAudioRef.current.pause();
             webAudioRef.current.src = '';
             webAudioRef.current.load();
-            webAudioRef.current = new window.Audio(recording.uri);
+            webAudioRef.current = new window.Audio();
             
             webAudioRef.current.onended = () => {
               setPlayingId(null);
@@ -129,6 +144,10 @@ export default function LibraryScreen() {
               setIsPlaying(false);
             };
           }
+          
+          // Convert Base64 to usable URL if needed
+          const audioUrl = base64ToBlobUrl(recording.uri);
+          webAudioRef.current.src = audioUrl;
           
           try {
             await webAudioRef.current.play();

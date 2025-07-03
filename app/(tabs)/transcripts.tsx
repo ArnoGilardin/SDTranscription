@@ -16,6 +16,39 @@ import { THEME } from '@/constants/theme';
 
 const UPLOADS_DIRECTORY = `${FileSystem.documentDirectory}uploads/`;
 
+// Helper function to convert Base64 to Blob for transcription
+const base64ToBlob = (base64: string): Blob => {
+  if (!base64.startsWith('data:')) {
+    throw new Error('Invalid Base64 format');
+  }
+  
+  const [header, data] = base64.split(',');
+  const mimeType = header.match(/:(.*?);/)?.[1] || 'audio/webm';
+  const byteCharacters = atob(data);
+  const byteNumbers = new Array(byteCharacters.length);
+  
+  for (let i = 0; i < byteCharacters.length; i++) {
+    byteNumbers[i] = byteCharacters.charCodeAt(i);
+  }
+  
+  const byteArray = new Uint8Array(byteNumbers);
+  return new Blob([byteArray], { type: mimeType });
+};
+
+// Helper function to convert Base64 to Blob URL for web playback
+const base64ToBlobUrl = (base64: string): string => {
+  if (!base64.startsWith('data:')) {
+    return base64; // Not a Base64 string, return as-is
+  }
+  
+  try {
+    return base64; // Base64 data URLs can be used directly as audio src
+  } catch (error) {
+    console.error('Error handling Base64 URL:', error);
+    return base64;
+  }
+};
+
 export default function TranscriptsScreen() {
   const { t } = useLanguage();
   const { recordings, updateTranscript, transcriptionSettings } = useRecordingsStore();
@@ -165,8 +198,9 @@ export default function TranscriptsScreen() {
       audioRef.current = new Audio();
       setupAudioEventListeners();
 
-      // Load new audio source
-      audioRef.current.src = recording.uri;
+      // Convert Base64 to usable URL if needed
+      const audioUrl = base64ToBlobUrl(recording.uri);
+      audioRef.current.src = audioUrl;
       audioRef.current.load();
       
       setPlayingId(recording.id);
@@ -186,7 +220,27 @@ export default function TranscriptsScreen() {
       setProcessingId(id);
       setError(null);
 
-      if (Platform.OS !== 'web') {
+      // Check if this is a Base64 encoded audio (web recording)
+      let audioUri = uri;
+      let audioBlob: Blob | null = null;
+
+      if (Platform.OS === 'web' && uri.startsWith('data:')) {
+        // Convert Base64 to Blob for transcription
+        try {
+          audioBlob = base64ToBlob(uri);
+          
+          // Check file size (25MB limit)
+          if (audioBlob.size > 25 * 1024 * 1024) {
+            throw new Error('Le fichier audio est trop volumineux. La taille maximale est de 25 Mo.');
+          }
+          
+          // Create a temporary blob URL for the transcription API
+          audioUri = URL.createObjectURL(audioBlob);
+        } catch (error) {
+          console.error('Error processing Base64 audio:', error);
+          throw new Error('Erreur lors du traitement de l\'enregistrement audio.');
+        }
+      } else if (Platform.OS !== 'web') {
         const fileInfo = await FileSystem.getInfoAsync(uri);
         if (!fileInfo.exists) {
           throw new Error('Audio file not found');
@@ -201,14 +255,19 @@ export default function TranscriptsScreen() {
         }
         
         transcript = await transcribeAudioRemote(
-          uri, 
+          audioUri, 
           transcriptionSettings.remoteApiKey, 
           transcriptionSettings.model
         );
       } else {
         const recording = recordings.find(r => r.id === id);
-        const result = await transcribeAudio(uri, recording?.speakers || []);
+        const result = await transcribeAudio(audioUri, recording?.speakers || []);
         transcript = result.transcript;
+      }
+      
+      // Clean up temporary blob URL if created
+      if (Platform.OS === 'web' && uri.startsWith('data:') && audioUri !== uri) {
+        URL.revokeObjectURL(audioUri);
       }
       
       if (!transcript) {
