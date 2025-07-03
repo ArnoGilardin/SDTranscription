@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Platform, ScrollView, Alert } from 'react-native';
-import { FileText, RefreshCcw, Download, Share2, Play, Pause, AlertTriangle } from 'lucide-react-native';
+import { FileText, RefreshCcw, Download, Share2, Play, Pause, TriangleAlert as AlertTriangle } from 'lucide-react-native';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useRecordingsStore } from '@/stores/recordingsStore';
 import { transcribeAudio, transcribeAudioRemote } from '@/utils/openai';
