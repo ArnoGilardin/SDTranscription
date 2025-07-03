@@ -44,12 +44,6 @@ export default function TranscriptsScreen() {
       }
     })();
 
-    // Initialize audio element once
-    if (Platform.OS === 'web' && !audioRef.current) {
-      audioRef.current = new Audio();
-      setupAudioEventListeners();
-    }
-
     return () => {
       cleanupAudio();
     };
@@ -116,6 +110,7 @@ export default function TranscriptsScreen() {
       // Pause and clear source
       audioRef.current.pause();
       audioRef.current.src = '';
+      audioRef.current.load(); // Force cleanup of internal state
       
       // Nullify the audio reference to prevent stale references
       audioRef.current = null;
@@ -151,30 +146,24 @@ export default function TranscriptsScreen() {
 
   const handlePlayPause = async (recording: any) => {
     try {
-      // Re-initialize audio element if it was cleaned up
-      if (Platform.OS === 'web' && !audioRef.current) {
-        audioRef.current = new Audio();
-        setupAudioEventListeners();
-      }
-
-      if (!audioRef.current) {
-        console.error('Audio element not initialized');
+      if (Platform.OS !== 'web') {
+        console.error('Audio playback only supported on web');
         return;
       }
 
       // If the same recording is playing, pause it
-      if (playingId === recording.id && isPlaying) {
+      if (playingId === recording.id && isPlaying && audioRef.current) {
         audioRef.current.pause();
         setIsPlaying(false);
         return;
       }
 
-      // Stop current playback if different recording
-      if (isPlaying) {
-        audioRef.current.pause();
-        setIsPlaying(false);
-        progressValue.value = withTiming(0);
-      }
+      // Complete cleanup of existing audio element before creating new one
+      cleanupAudio();
+
+      // Create a fresh audio element
+      audioRef.current = new Audio();
+      setupAudioEventListeners();
 
       // Load new audio source
       audioRef.current.src = recording.uri;
@@ -365,23 +354,25 @@ export default function TranscriptsScreen() {
                     {new Date(item.date).toLocaleDateString()}
                   </Text>
                   
-                  <View style={styles.playerContainer}>
-                    <TouchableOpacity
-                      style={styles.playButton}
-                      onPress={() => handlePlayPause(item)}>
-                      {playingId === item.id && isPlaying ? (
-                        <Pause size={20} color={THEME.colors.accent} />
-                      ) : (
-                        <Play size={20} color={THEME.colors.accent} />
-                      )}
-                    </TouchableOpacity>
-                    
-                    <View style={styles.progressBar}>
-                      <Animated.View 
-                        style={[styles.progressFill, progressStyle]} 
-                      />
+                  {Platform.OS === 'web' && (
+                    <View style={styles.playerContainer}>
+                      <TouchableOpacity
+                        style={styles.playButton}
+                        onPress={() => handlePlayPause(item)}>
+                        {playingId === item.id && isPlaying ? (
+                          <Pause size={20} color={THEME.colors.accent} />
+                        ) : (
+                          <Play size={20} color={THEME.colors.accent} />
+                        )}
+                      </TouchableOpacity>
+                      
+                      <View style={styles.progressBar}>
+                        <Animated.View 
+                          style={[styles.progressFill, progressStyle]} 
+                        />
+                      </View>
                     </View>
-                  </View>
+                  )}
 
                   <ScrollView
                     ref={scrollViewRef}
