@@ -405,7 +405,7 @@ export async function transcribeAudio(audioData: string | Blob, speakers: any[],
 
         // Check for specific error types
         if (error.name === 'AbortError') {
-          lastError = new Error('Request timeout - OpenAI API took too long to respond');
+          lastError = new Error('Délai d\'attente dépassé - L\'API OpenAI met trop de temps à répondre');
         }
 
         const isRetryableError = error.message.includes('Network') || 
@@ -440,7 +440,7 @@ export async function transcribeAudio(audioData: string | Blob, speakers: any[],
         throw new Error('Timeout - OpenAI API met trop de temps à répondre. Veuillez réessayer.');
       }
       
-      throw new Error(`Erreur lors de la transcription: ${lastError.message}`);
+      throw lastError;
     }
 
     throw new Error('Échec de la transcription après plusieurs tentatives.');
