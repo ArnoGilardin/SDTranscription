@@ -177,25 +177,36 @@ export async function transcribeAudioRemote(
 
       } catch (error: any) {
         console.error(`Attempt ${attempt} failed:`, error);
-        lastError = error;
+        
+        // Ensure lastError is always an Error object with a defined message
+        if (error.name === 'AbortError' || error.reason === 'timeout') {
+          lastError = new Error('Délai d\'attente dépassé - Le service de transcription met trop de temps à répondre');
+        } else {
+          lastError = error instanceof Error ? error : new Error(String(error?.message || error || 'Erreur inconnue'));
+          // Ensure message is always a string
+          if (typeof lastError.message !== 'string') {
+            lastError.message = String(lastError.message || 'Erreur inconnue');
+          }
+        }
 
         // Check for specific error types that shouldn't be retried
-        if (error.message === 'AUTHENTICATION_ERROR' || 
-            error.message === 'SERVICE_NOT_FOUND' ||
-            error.message === 'METHOD_NOT_ALLOWED' ||
-            error.message.includes('413') || 
-            error.message.includes('Payload Too Large')) {
+        const errorMessage = lastError.message || '';
+        if (errorMessage === 'AUTHENTICATION_ERROR' || 
+            errorMessage === 'SERVICE_NOT_FOUND' ||
+            errorMessage === 'METHOD_NOT_ALLOWED' ||
+            errorMessage.includes('413') || 
+            errorMessage.includes('Payload Too Large')) {
           break; // Don't retry these errors
         }
 
         // Check for network errors that might be retryable
         const isNetworkError = error.name === 'AbortError' ||
                               error.name === 'TypeError' ||
-                              error.message === 'SERVICE_UNAVAILABLE' ||
-                              error.message.includes('Failed to fetch') ||
-                              error.message.includes('Network') ||
-                              error.message.includes('ECONNREFUSED') ||
-                              error.message.includes('timeout');
+                              errorMessage === 'SERVICE_UNAVAILABLE' ||
+                              errorMessage.includes('Failed to fetch') ||
+                              errorMessage.includes('Network') ||
+                              errorMessage.includes('ECONNREFUSED') ||
+                              errorMessage.includes('timeout');
 
         if (!isNetworkError || attempt === maxRetries) {
           break;
@@ -210,25 +221,26 @@ export async function transcribeAudioRemote(
 
     if (lastError) {
       // Provide more specific error messages
-      if (lastError.message === 'AUTHENTICATION_ERROR') {
+      const errorMessage = lastError.message || '';
+      if (errorMessage === 'AUTHENTICATION_ERROR') {
         throw new Error('Erreur d\'authentification API. Veuillez vérifier votre clé API dans les paramètres.');
-      } else if (lastError.message === 'SERVICE_NOT_FOUND') {
+      } else if (errorMessage === 'SERVICE_NOT_FOUND') {
         throw new Error('Service de transcription introuvable. Veuillez contacter le support.');
-      } else if (lastError.message === 'METHOD_NOT_ALLOWED') {
+      } else if (errorMessage === 'METHOD_NOT_ALLOWED') {
         throw new Error('Configuration du service incorrecte. Veuillez contacter le support technique.');
-      } else if (lastError.message === 'SERVICE_UNAVAILABLE') {
+      } else if (errorMessage === 'SERVICE_UNAVAILABLE') {
         throw new Error('Le service de transcription est temporairement indisponible. Veuillez réessayer plus tard.');
-      } else if (lastError.name === 'AbortError' || lastError.message.includes('timeout')) {
+      } else if (lastError.name === 'AbortError' || errorMessage.includes('timeout')) {
         throw new Error('Délai d\'attente dépassé. Le service met trop de temps à répondre. Veuillez réessayer.');
-      } else if (lastError.name === 'TypeError' || lastError.message.includes('Failed to fetch')) {
+      } else if (lastError.name === 'TypeError' || errorMessage.includes('Failed to fetch')) {
         throw new Error('Impossible de se connecter au service de transcription. Vérifiez votre connexion internet ou essayez le mode local.');
-      } else if (lastError.message.includes('429') || lastError.message.includes('Too Many Requests')) {
+      } else if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests')) {
         throw new Error('Limite de requêtes API atteinte. Veuillez réessayer plus tard.');
-      } else if (lastError.message.includes('413') || lastError.message.includes('Payload Too Large')) {
+      } else if (errorMessage.includes('413') || errorMessage.includes('Payload Too Large')) {
         throw new Error('Le fichier audio est trop volumineux. Veuillez réduire sa taille.');
       }
       
-      throw new Error(`Erreur lors de la transcription: ${lastError.message}`);
+      throw new Error(`Erreur lors de la transcription: ${errorMessage}`);
     }
 
     throw new Error('Échec de la transcription après plusieurs tentatives.');
@@ -401,17 +413,23 @@ export async function transcribeAudio(audioData: string | Blob, speakers: any[],
 
       } catch (error: any) {
         console.error(`Attempt ${attempt} failed:`, error);
-        lastError = error;
-
-        // Check for specific error types
-        if (error.name === 'AbortError') {
+        
+        // Ensure lastError is always an Error object with a defined message
+        if (error.name === 'AbortError' || error.reason === 'timeout') {
           lastError = new Error('Délai d\'attente dépassé - L\'API OpenAI met trop de temps à répondre');
+        } else {
+          lastError = error instanceof Error ? error : new Error(String(error?.message || error || 'Erreur inconnue'));
+          // Ensure message is always a string
+          if (typeof lastError.message !== 'string') {
+            lastError.message = String(lastError.message || 'Erreur inconnue');
+          }
         }
 
-        const isRetryableError = error.message.includes('Network') || 
-                               error.message.includes('ECONNREFUSED') ||
-                               error.message.includes('timeout') ||
-                               error.message.includes('Failed to fetch') ||
+        const errorMessage = lastError.message || '';
+        const isRetryableError = errorMessage.includes('Network') || 
+                               errorMessage.includes('ECONNREFUSED') ||
+                               errorMessage.includes('timeout') ||
+                               errorMessage.includes('Failed to fetch') ||
                                error.name === 'AbortError';
 
         if (!isRetryableError || attempt === maxRetries) {
@@ -426,17 +444,18 @@ export async function transcribeAudio(audioData: string | Blob, speakers: any[],
     }
 
     if (lastError) {
-      if (lastError.message.includes('401') || lastError.message.includes('Unauthorized')) {
+      const errorMessage = lastError.message || '';
+      if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
         throw new Error('Erreur d\'authentification API. Veuillez vérifier votre clé API.');
-      } else if (lastError.message.includes('429') || lastError.message.includes('Too Many Requests')) {
+      } else if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests')) {
         throw new Error('Limite de requêtes API atteinte. Veuillez réessayer plus tard.');
-      } else if (lastError.message.includes('insufficient_quota')) {
+      } else if (errorMessage.includes('insufficient_quota')) {
         throw new Error('Quota API insuffisant. Veuillez vérifier votre abonnement OpenAI.');
-      } else if (lastError.message.includes('Network') || lastError.message.includes('Failed to fetch')) {
+      } else if (errorMessage.includes('Network') || errorMessage.includes('Failed to fetch')) {
         throw new Error('Erreur de connexion réseau. Veuillez vérifier votre connexion internet et réessayer.');
-      } else if (lastError.message.includes('413') || lastError.message.includes('Payload Too Large')) {
+      } else if (errorMessage.includes('413') || errorMessage.includes('Payload Too Large')) {
         throw new Error('Le fichier audio est trop volumineux. Veuillez réduire sa taille.');
-      } else if (lastError.message.includes('timeout')) {
+      } else if (errorMessage.includes('timeout')) {
         throw new Error('Timeout - OpenAI API met trop de temps à répondre. Veuillez réessayer.');
       }
       
