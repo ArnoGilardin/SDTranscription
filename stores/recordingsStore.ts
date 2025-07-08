@@ -26,8 +26,9 @@ export interface Recording {
 }
 
 export interface TranscriptionSettings {
-  mode: 'local' | 'remote';
+  mode: 'local' | 'remote' | 'openai';
   remoteApiKey: string;
+  openaiApiKey: string;
   model: 'small' | 'medium';
 }
 
@@ -57,8 +58,9 @@ const DEFAULT_COLORS = [
 export const useRecordingsStore = create<RecordingsState>((set) => ({
   recordings: [],
   transcriptionSettings: {
-    mode: 'remote',
+    mode: 'openai',
     remoteApiKey: '',
+    openaiApiKey: '',
     model: 'small',
   },
   addRecording: (recording) =>

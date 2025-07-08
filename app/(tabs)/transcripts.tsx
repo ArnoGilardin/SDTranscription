@@ -295,10 +295,16 @@ export default function TranscriptsScreen() {
           transcriptionSettings.remoteApiKey, 
           transcriptionSettings.model
         );
-      } else {
+      } else if (transcriptionSettings.mode === 'openai') {
+        if (!transcriptionSettings.openaiApiKey) {
+          throw new Error('Clé API OpenAI manquante. Veuillez configurer votre clé API dans les paramètres.');
+        }
+        
         const recording = recordings.find(r => r.id === id);
-        const result = await transcribeAudio(audioData, recording?.speakers || []);
+        const result = await transcribeAudio(audioData, recording?.speakers || [], transcriptionSettings.openaiApiKey);
         transcript = result.transcript;
+      } else {
+        throw new Error('Mode de transcription local non implémenté.');
       }
       
       if (!transcript) {
@@ -408,15 +414,19 @@ export default function TranscriptsScreen() {
       const statusIcon = serviceStatus === 'available' ? '🟢' : 
                         serviceStatus === 'unavailable' ? '🔴' : '🟡';
       return `API Distante (${transcriptionSettings.model}) ${statusIcon}`;
+    } else if (transcriptionSettings.mode === 'openai') {
+      return 'OpenAI Whisper';
     }
-    return 'OpenAI Whisper';
+    return 'Local (Expérimental)';
   };
 
   const canTranscribe = () => {
     if (transcriptionSettings.mode === 'remote') {
       return !!transcriptionSettings.remoteApiKey && serviceStatus !== 'unavailable';
+    } else if (transcriptionSettings.mode === 'openai') {
+      return !!transcriptionSettings.openaiApiKey;
     }
-    return true; // OpenAI mode always available if API key is set
+    return false; // Local mode not implemented yet
   };
 
   const getServiceStatusMessage = () => {

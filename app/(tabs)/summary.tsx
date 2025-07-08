@@ -8,7 +8,7 @@ import { generateSummary } from '@/utils/openai';
 
 export default function SummaryScreen() {
   const { t } = useLanguage();
-  const { recordings, updateSummary } = useRecordingsStore();
+  const { recordings, updateSummary, transcriptionSettings } = useRecordingsStore();
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,7 +17,22 @@ export default function SummaryScreen() {
       setProcessingId(id);
       setError(null);
 
-      const summary = await generateSummary(transcript);
+      // Check if we have the required API key based on mode
+      let apiKey = '';
+      if (transcriptionSettings.mode === 'openai') {
+        if (!transcriptionSettings.openaiApiKey) {
+          throw new Error('Clé API OpenAI manquante. Veuillez configurer votre clé API dans les paramètres.');
+        }
+        apiKey = transcriptionSettings.openaiApiKey;
+      } else {
+        // For remote mode, we can also use OpenAI for summary if available
+        if (!transcriptionSettings.openaiApiKey) {
+          throw new Error('Une clé API OpenAI est requise pour générer des résumés. Veuillez la configurer dans les paramètres.');
+        }
+        apiKey = transcriptionSettings.openaiApiKey;
+      }
+
+      const summary = await generateSummary(transcript, apiKey);
       if (!summary) {
         throw new Error(t('summary.generationError'));
       }
@@ -40,7 +55,10 @@ export default function SummaryScreen() {
       </View>
 
       {error && (
-        <View style={styles.errorContainer}>
+            {transcriptionSettings.mode === 'openai' 
+              ? 'Veuillez configurer votre clé API OpenAI dans les paramètres.'
+              : 'Veuillez configurer votre clé API dans les paramètres pour utiliser la transcription.'
+            }
           <Text style={styles.errorText}>{error}</Text>
         </View>
       )}

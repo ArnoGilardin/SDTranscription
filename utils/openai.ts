@@ -2,13 +2,15 @@ import OpenAI from 'openai';
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 
-const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB in bytes
 
-const openai = new OpenAI({
-  apiKey: apiKey || '',
-  dangerouslyAllowBrowser: true
-});
+// Create OpenAI client with provided API key
+const createOpenAIClient = (apiKey: string) => {
+  return new OpenAI({
+    apiKey: apiKey,
+    dangerouslyAllowBrowser: true
+  });
+};
 
 // Helper function to check if a URL is reachable
 async function checkApiHealth(apiUrl: string): Promise<boolean> {
@@ -233,10 +235,12 @@ export async function transcribeAudioRemote(
   }
 }
 
-export async function transcribeAudio(audioData: string | Blob, speakers: any[]): Promise<{ transcript: string; words: any[] }> {
+export async function transcribeAudio(audioData: string | Blob, speakers: any[], apiKey: string): Promise<{ transcript: string; words: any[] }> {
   if (!apiKey) {
     throw new Error('Clé API OpenAI invalide ou manquante. Veuillez vérifier votre configuration.');
   }
+
+  const openai = createOpenAIClient(apiKey);
 
   try {
     let formData = new FormData();
@@ -439,10 +443,12 @@ export async function transcribeAudio(audioData: string | Blob, speakers: any[])
   }
 }
 
-export async function generateSummary(transcript: string): Promise<string> {
+export async function generateSummary(transcript: string, apiKey: string): Promise<string> {
   if (!apiKey) {
     throw new Error('Clé API OpenAI invalide ou manquante.');
   }
+
+  const openai = createOpenAIClient(apiKey);
 
   try {
     const completion = await openai.chat.completions.create({

@@ -13,7 +13,8 @@ const LANGUAGES = [
 
 const TRANSCRIPTION_MODES = [
   { value: 'remote' as const, label: 'API Distante', description: 'Utilise l\'API gilardinservice.shop' },
-  { value: 'local' as const, label: 'OpenAI Whisper', description: 'Utilise l\'API OpenAI directement' }
+  { value: 'openai' as const, label: 'OpenAI Whisper', description: 'Utilise l\'API OpenAI directement' },
+  { value: 'local' as const, label: 'Local (Expérimental)', description: 'Traitement local (non implémenté)' }
 ];
 
 const MODELS = [
@@ -28,7 +29,9 @@ export default function SettingsScreen() {
   const [showTranscriptionModal, setShowTranscriptionModal] = useState(false);
   const [showModelModal, setShowModelModal] = useState(false);
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [showOpenAIKeyModal, setShowOpenAIKeyModal] = useState(false);
   const [tempApiKey, setTempApiKey] = useState(transcriptionSettings.remoteApiKey);
+  const [tempOpenAIKey, setTempOpenAIKey] = useState(transcriptionSettings.openaiApiKey);
 
   const currentLanguage = LANGUAGES.find(lang => lang.code === language);
   const currentMode = TRANSCRIPTION_MODES.find(mode => mode.value === transcriptionSettings.mode);
@@ -42,6 +45,16 @@ export default function SettingsScreen() {
     updateTranscriptionSettings({ remoteApiKey: tempApiKey.trim() });
     setShowApiKeyModal(false);
     Alert.alert('Succès', 'Clé API sauvegardée avec succès');
+  };
+
+  const handleSaveOpenAIKey = () => {
+    if (!tempOpenAIKey.trim()) {
+      Alert.alert('Erreur', 'Veuillez saisir une clé API OpenAI valide');
+      return;
+    }
+    updateTranscriptionSettings({ openaiApiKey: tempOpenAIKey.trim() });
+    setShowOpenAIKeyModal(false);
+    Alert.alert('Succès', 'Clé API OpenAI sauvegardée avec succès');
   };
 
   return (
@@ -103,11 +116,34 @@ export default function SettingsScreen() {
               <View style={styles.iconContainer}>
                 <Key size={20} color={THEME.colors.accent} />
               </View>
-              <Text style={styles.settingText}>Clé API</Text>
+              <Text style={styles.settingText}>Clé API Distante</Text>
             </View>
             <View style={styles.settingRight}>
               <Text style={styles.settingValue}>
                 {transcriptionSettings.remoteApiKey ? '••••••••' : 'Non configurée'}
+              </Text>
+              <ChevronRight size={20} color={THEME.colors.text} />
+            </View>
+          </TouchableOpacity>
+        )}
+
+        {transcriptionSettings.mode === 'openai' && (
+          <TouchableOpacity 
+            style={styles.settingItem}
+            onPress={() => {
+              setTempOpenAIKey(transcriptionSettings.openaiApiKey);
+              setShowOpenAIKeyModal(true);
+            }}
+          >
+            <View style={styles.settingLeft}>
+              <View style={styles.iconContainer}>
+                <Key size={20} color={THEME.colors.accent} />
+              </View>
+              <Text style={styles.settingText}>Clé API OpenAI</Text>
+            </View>
+            <View style={styles.settingRight}>
+              <Text style={styles.settingValue}>
+                {transcriptionSettings.openaiApiKey ? '••••••••' : 'Non configurée'}
               </Text>
               <ChevronRight size={20} color={THEME.colors.text} />
             </View>
@@ -256,7 +292,7 @@ export default function SettingsScreen() {
       {showApiKeyModal && (
         <View style={styles.modalOverlay}>
           <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Clé API de transcription</Text>
+            <Text style={styles.modalTitle}>Clé API de transcription distante</Text>
             <Text style={styles.modalDescription}>
               Saisissez votre clé API pour l'API de transcription distante
             </Text>
@@ -278,6 +314,40 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 style={[styles.modalButton, styles.saveButton]}
                 onPress={handleSaveApiKey}
+              >
+                <Text style={styles.saveButtonText}>Sauvegarder</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* OpenAI API Key Modal */}
+      {showOpenAIKeyModal && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>Clé API OpenAI</Text>
+            <Text style={styles.modalDescription}>
+              Saisissez votre clé API OpenAI pour utiliser Whisper directement
+            </Text>
+            <TextInput
+              style={styles.textInput}
+              value={tempOpenAIKey}
+              onChangeText={setTempOpenAIKey}
+              placeholder="sk-..."
+              placeholderTextColor={THEME.colors.text}
+              secureTextEntry
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setShowOpenAIKeyModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.saveButton]}
+                onPress={handleSaveOpenAIKey}
               >
                 <Text style={styles.saveButtonText}>Sauvegarder</Text>
               </TouchableOpacity>
