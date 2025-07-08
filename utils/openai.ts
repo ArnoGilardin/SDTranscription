@@ -80,6 +80,10 @@ export async function transcribeAudioRemote(
           throw new Error('Le fichier audio est trop volumineux. La taille maximale est de 25 Mo.');
         }
         
+        if (audioBlob.size === 0) {
+          throw new Error('Le fichier audio est vide. Veuillez réenregistrer votre audio.');
+        }
+        
         formData.append('file', audioBlob, 'audio.webm');
       } catch (error) {
         console.error('Error processing audio file:', error);
@@ -267,6 +271,10 @@ export async function transcribeAudio(audioData: string | Blob, speakers: any[],
         
         if (audioBlob.size > MAX_FILE_SIZE) {
           throw new Error('Le fichier audio est trop volumineux. La taille maximale est de 25 Mo.');
+        }
+        
+        if (audioBlob.size === 0) {
+          throw new Error('Le fichier audio est vide. Veuillez réenregistrer votre audio.');
         }
         
         formData.append('file', audioBlob, 'audio.webm');
