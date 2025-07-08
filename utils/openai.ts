@@ -127,7 +127,7 @@ export async function transcribeAudioRemote(
         console.log(`Attempting transcription (attempt ${attempt}/${maxRetries})`);
         
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000); // Reduced timeout to 30 seconds
+        const timeoutId = setTimeout(() => controller.abort({ reason: 'timeout' }), 30000); // Reduced timeout to 30 seconds
 
         const response = await fetch(apiUrl, {
           method: 'POST',
@@ -323,7 +323,7 @@ export async function transcribeAudio(audioData: string | Blob, speakers: any[],
         console.log(`Attempting OpenAI transcription (attempt ${attempt}/${maxRetries})`);
         
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+        const timeoutId = setTimeout(() => controller.abort({ reason: 'timeout' }), 60000); // 60 second timeout
 
         const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
           method: 'POST',
@@ -405,7 +405,7 @@ export async function transcribeAudio(audioData: string | Blob, speakers: any[],
 
         // Check for specific error types
         if (error.name === 'AbortError') {
-          lastError.message = 'Request timeout - OpenAI API took too long to respond';
+          lastError = new Error('Request timeout - OpenAI API took too long to respond');
         }
 
         const isRetryableError = error.message.includes('Network') || 
