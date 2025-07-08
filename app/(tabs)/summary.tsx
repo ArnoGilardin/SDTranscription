@@ -55,11 +55,14 @@ export default function SummaryScreen() {
       </View>
 
       {error && (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <Text style={styles.errorText}>
             {transcriptionSettings.mode === 'openai' 
               ? 'Veuillez configurer votre clé API OpenAI dans les paramètres.'
               : 'Veuillez configurer votre clé API dans les paramètres pour utiliser la transcription.'
             }
-          <Text style={styles.errorText}>{error}</Text>
+          </Text>
         </View>
       )}
 
