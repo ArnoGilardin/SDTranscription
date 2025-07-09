@@ -339,6 +339,7 @@ export async function transcribeAudio(audioData: string | Blob, speakers: any[],
 
         const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
           method: 'POST',
+          mode: 'cors',
           headers: {
             'Authorization': `Bearer ${apiKey}`,
           },
