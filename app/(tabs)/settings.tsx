@@ -177,7 +177,10 @@ export default function SettingsScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{t('settings.about')}</Text>
         
-        <TouchableOpacity style={styles.settingItem}>
+        <TouchableOpacity 
+          style={styles.settingItem}
+          onPress={() => router.push('/(tabs)/privacy')}
+        >
           <Text style={styles.settingText}>{t('settings.privacyPolicy')}</Text>
           <ChevronRight size={20} color={THEME.colors.text} />
         </TouchableOpacity>
