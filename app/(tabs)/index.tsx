@@ -393,7 +393,7 @@ export default function RecordScreen() {
   }
 
   async function stopRecording() {
-    if ((!recording && Platform.OS !== 'web') || !currentRecordingId || isUnloading.current || !isRecording) {
+    if (!currentRecordingId || isUnloading.current || !isRecording) {
       return;
     }
 
@@ -411,6 +411,7 @@ export default function RecordScreen() {
         // Stop web recording
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
           mediaRecorderRef.current.stop();
+          // The recording will be saved in the MediaRecorder's onstop event
         }
       } else {
         // Stop native recording
