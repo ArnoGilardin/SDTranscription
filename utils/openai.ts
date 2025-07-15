@@ -16,7 +16,7 @@ const createOpenAIClient = (apiKey: string) => {
 async function checkApiHealth(apiUrl: string): Promise<boolean> {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout for health check
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout for health check
     
     // Try a simple GET request to check if the service is reachable
     const response = await fetch(apiUrl, {
@@ -127,7 +127,7 @@ export async function transcribeAudioRemote(
         console.log(`Attempting transcription (attempt ${attempt}/${maxRetries})`);
         
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort({ reason: 'timeout' }), 30000); // Reduced timeout to 30 seconds
+        const timeoutId = setTimeout(() => controller.abort({ reason: 'timeout' }), 60000); // Increased timeout to 60 seconds
 
         const response = await fetch(apiUrl, {
           method: 'POST',
@@ -335,7 +335,7 @@ export async function transcribeAudio(audioData: string | Blob, speakers: any[],
         console.log(`Attempting OpenAI transcription (attempt ${attempt}/${maxRetries})`);
         
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort({ reason: 'timeout' }), 60000); // 60 second timeout
+        const timeoutId = setTimeout(() => controller.abort({ reason: 'timeout' }), 120000); // 120 second timeout
 
         const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
           method: 'POST',
