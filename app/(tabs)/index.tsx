@@ -303,6 +303,7 @@ export default function RecordScreen() {
       
       mediaRecorder.onstop = async () => {
         console.log('MediaRecorder stopped, processing audio...');
+        console.log('currentRecordingId in onstop:', currentRecordingId);
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         console.log('Audio blob created, size:', audioBlob.size);
         
@@ -310,10 +311,12 @@ export default function RecordScreen() {
         const base64Uri = await blobToBase64(audioBlob);
         console.log('Base64 conversion complete, length:', base64Uri.length);
         
-        if (currentRecordingId) {
-          console.log('Creating recording with ID:', currentRecordingId);
+        // Use a captured recordingId since currentRecordingId might be reset
+        const recordingId = currentRecordingId || Date.now().toString();
+        if (recordingId) {
+          console.log('Creating recording with ID:', recordingId);
           const newRecording = {
-            id: currentRecordingId,
+            id: recordingId,
             title: generateTitle(),
             uri: base64Uri, // Store as Base64 instead of blob URL
             duration,
@@ -324,7 +327,7 @@ export default function RecordScreen() {
           addRecording(newRecording);
           console.log('Recording added successfully');
         } else {
-          console.log('No currentRecordingId found!');
+          console.log('No recordingId found!');
         }
         
         // Clean up stream
@@ -459,16 +462,29 @@ export default function RecordScreen() {
         }
       }
       
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to stop recording', err);
       setError(t('recording.stopError'));
     } finally {
-      setRecording(null);
-      setIsRecording(false);
-      setCurrentRecordingId(null);
-      isUnloading.current = false;
-      startTime.current = null;
-      setIsProcessing(false);
+      // Don't reset currentRecordingId immediately for web - let the onstop event handle it
+      if (Platform.OS !== 'web') {
+        setRecording(null);
+        setIsRecording(false);
+        setCurrentRecordingId(null);
+        isUnloading.current = false;
+        startTime.current = null;
+        setIsProcessing(false);
+      } else {
+        // For web, only reset the UI state, keep currentRecordingId for onstop event
+        setIsRecording(false);
+        setIsProcessing(false);
+        // Reset other states after a short delay to allow onstop to complete
+        setTimeout(() => {
+          setCurrentRecordingId(null);
+          isUnloading.current = false;
+          startTime.current = null;
+        }, 100);
+      }
     }
   }
 
