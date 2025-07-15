@@ -5,6 +5,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useRecordingsStore } from '@/stores/recordingsStore';
 import { Language } from '@/types/i18n';
 import { THEME } from '@/constants/theme';
+import { router } from 'expo-router';
 
 const LANGUAGES = [
   { code: 'en' as Language, name: 'English', nativeName: 'English' },
@@ -181,7 +182,10 @@ export default function SettingsScreen() {
           <ChevronRight size={20} color={THEME.colors.text} />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.settingItem}>
+        <TouchableOpacity 
+          style={styles.settingItem}
+          onPress={() => router.push('/(tabs)/terms')}
+        >
           <Text style={styles.settingText}>{t('settings.termsOfService')}</Text>
           <ChevronRight size={20} color={THEME.colors.text} />
         </TouchableOpacity>

@@ -75,6 +75,12 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="terms"
+        options={{
+          href: null, // Hide from tab bar
+        }}
+      />
     </Tabs>
   );
 }
