@@ -438,17 +438,25 @@ export default function RecordScreen() {
         }
       } else {
         // Stop native recording
+        console.log('Stopping native recording, recording object exists:', !!recording);
         if (recording) {
+          console.log('Getting URI from recording...');
           // Get the URI before stopping the recording
           const uri = recording.getURI();
+          console.log('Recording URI:', uri);
           
           // Stop and unload the recording
+          console.log('Stopping and unloading recording...');
           await recording.stopAndUnloadAsync();
+          console.log('Recording stopped and unloaded');
           
           await deactivateKeepAwakeAsync();
+          console.log('Keep awake deactivated');
           
           if (uri) {
+            console.log('Saving recording to library...');
             const savedUri = await saveRecordingToLibrary(uri);
+            console.log('Recording saved, creating recording object...');
             const newRecording = {
               id: currentRecordingId,
               title: generateTitle(),
@@ -457,8 +465,14 @@ export default function RecordScreen() {
               date: new Date().toISOString(),
               speakers: [],
             };
+            console.log('Adding recording to store:', newRecording);
             addRecording(newRecording);
+            console.log('Recording added successfully');
+          } else {
+            console.error('No URI found for recording');
           }
+        } else {
+          console.error('No recording object found');
         }
       }
       
@@ -468,12 +482,14 @@ export default function RecordScreen() {
     } finally {
       // Don't reset currentRecordingId immediately for web - let the onstop event handle it
       if (Platform.OS !== 'web') {
+        console.log('Cleaning up native recording state...');
         setRecording(null);
         setIsRecording(false);
         setCurrentRecordingId(null);
         isUnloading.current = false;
         startTime.current = null;
         setIsProcessing(false);
+        console.log('Native recording cleanup complete');
       } else {
         // For web, only reset the UI state, keep currentRecordingId for onstop event
         setIsRecording(false);
