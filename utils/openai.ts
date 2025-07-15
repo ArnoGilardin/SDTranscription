@@ -326,6 +326,7 @@ export async function transcribeAudio(audioData: string | Blob, speakers: any[],
     formData.append('response_format', 'verbose_json');
     formData.append('temperature', '0.2');
     formData.append('language', 'fr');
+    formData.append('prompt', 'Transcrivez complètement tout le contenu audio sans aucune troncature.');
 
     const maxRetries = 3;
     let lastError = null;
@@ -396,7 +397,7 @@ export async function transcribeAudio(audioData: string | Blob, speakers: any[],
           messages: [
             {
               role: 'system',
-              content: 'You are a helpful assistant that improves transcriptions. Format the text with proper punctuation, paragraphs, and correct any obvious errors while maintaining the original meaning. The text is in French, so ensure proper French formatting and punctuation rules are followed.',
+              content: 'You are a helpful assistant that improves transcriptions. Format the text with proper punctuation, paragraphs, and correct any obvious errors while maintaining the original meaning and COMPLETE LENGTH. The text is in French, so ensure proper French formatting and punctuation rules are followed. NEVER truncate or shorten the text - preserve the entire transcription.',
             },
             {
               role: 'user',
@@ -404,6 +405,7 @@ export async function transcribeAudio(audioData: string | Blob, speakers: any[],
             },
           ],
           temperature: 0.3,
+          max_tokens: 4000,
         });
 
         const formattedText = completion.choices[0]?.message?.content;
