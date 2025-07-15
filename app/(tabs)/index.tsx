@@ -302,12 +302,16 @@ export default function RecordScreen() {
       };
       
       mediaRecorder.onstop = async () => {
+        console.log('MediaRecorder stopped, processing audio...');
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        console.log('Audio blob created, size:', audioBlob.size);
         
         // Convert to Base64 for persistence across page reloads
         const base64Uri = await blobToBase64(audioBlob);
+        console.log('Base64 conversion complete, length:', base64Uri.length);
         
         if (currentRecordingId) {
+          console.log('Creating recording with ID:', currentRecordingId);
           const newRecording = {
             id: currentRecordingId,
             title: generateTitle(),
@@ -316,7 +320,11 @@ export default function RecordScreen() {
             date: new Date().toISOString(),
             speakers: [],
           };
+          console.log('Adding recording to store:', newRecording);
           addRecording(newRecording);
+          console.log('Recording added successfully');
+        } else {
+          console.log('No currentRecordingId found!');
         }
         
         // Clean up stream
@@ -393,7 +401,15 @@ export default function RecordScreen() {
   }
 
   async function stopRecording() {
+    console.log('stopRecording called, state:', { 
+      currentRecordingId, 
+      isUnloading: isUnloading.current, 
+      isRecording,
+      platform: Platform.OS 
+    });
+    
     if (!currentRecordingId || isUnloading.current || !isRecording) {
+      console.log('Early return from stopRecording due to conditions');
       return;
     }
 
@@ -409,9 +425,13 @@ export default function RecordScreen() {
 
       if (Platform.OS === 'web') {
         // Stop web recording
+        console.log('Stopping web recording, MediaRecorder state:', mediaRecorderRef.current?.state);
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+          console.log('Calling MediaRecorder.stop()');
           mediaRecorderRef.current.stop();
           // The recording will be saved in the MediaRecorder's onstop event
+        } else {
+          console.log('MediaRecorder not in recording state or not found');
         }
       } else {
         // Stop native recording
