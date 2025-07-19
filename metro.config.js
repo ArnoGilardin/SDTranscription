@@ -6,24 +6,37 @@ const config = getDefaultConfig(__dirname, {
   isCSSEnabled: true,
 });
 
-// Optimize Metro configuration for better performance and stability
-config.maxWorkers = 2;
-config.transformer.minifierConfig = {
-  compress: false,
+// Optimize for Android builds
+config.resolver.platforms = ['native', 'android', 'ios', 'web'];
+
+// Reduce memory usage during builds
+config.maxWorkers = 1;
+
+// Optimize transformer for Android
+config.transformer = {
+  ...config.transformer,
+  minifierConfig: {
+    keep_fnames: true,
+    mangle: {
+      keep_fnames: true,
+    },
+  },
 };
 
-// Increase Node.js memory limit
-if (process.env.NODE_OPTIONS) {
-  process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS} --max-old-space-size=4096`;
-} else {
-  process.env.NODE_OPTIONS = '--max-old-space-size=4096';
-}
+// Configure resolver to avoid conflicts
+config.resolver = {
+  ...config.resolver,
+  sourceExts: ['js', 'jsx', 'json', 'ts', 'tsx', 'cjs', 'mjs'],
+  assetExts: ['png', 'jpg', 'jpeg', 'gif', 'wav', 'mp4', 'm4a', 'ttf', 'otf', 'woff', 'woff2'],
+  alias: {
+    '@': __dirname,
+  },
+};
 
-// Add cacheStores configuration to improve caching
-config.cacheStores = [];
-
-// Configure resolver for Expo Go
-config.resolver.sourceExts = ['js', 'jsx', 'json', 'ts', 'tsx', 'cjs'];
-config.resolver.assetExts = ['png', 'jpg', 'jpeg', 'gif', 'wav', 'mp4', 'm4a', 'ttf', 'otf'];
+// Disable experimental features that can cause Gradle issues
+config.experimental = {
+  ...config.experimental,
+  tsconfigPaths: false,
+};
 
 module.exports = config;

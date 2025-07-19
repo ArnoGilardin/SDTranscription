@@ -9,13 +9,17 @@
     "ios": "expo run:ios",
     "build:web": "expo export --platform web",
     "lint": "expo lint",
-    "build:android": "eas build --platform android --profile preview",
-    "build:ios": "eas build --platform ios --profile preview",
+    "build:android": "eas build --platform android --profile preview --clear-cache",
+    "build:android:prod": "eas build --platform android --profile production-android --clear-cache",
+    "build:ios": "eas build --platform ios --profile preview --clear-cache",
+    "build:ios:prod": "eas build --platform ios --profile production-ios --clear-cache",
     "build:production": "eas build --platform all --profile production",
     "submit:ios": "eas submit --platform ios",
     "submit:android": "eas submit --platform android",
     "update": "eas update",
-    "prebuild": "expo prebuild --clean"
+    "prebuild": "expo prebuild --clean",
+    "prebuild:android": "expo prebuild --platform android --clean",
+    "clean": "expo r -c && npm run prebuild"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.2.3",
