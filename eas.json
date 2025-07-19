@@ -9,12 +9,8 @@
       "env": {
         "NODE_ENV": "development"
       },
-      "ios": {
-        "resourceClass": "m1-medium"
-      },
       "android": {
-        "buildType": "developmentClient",
-        "gradleCommand": ":app:assembleDebug"
+        "buildType": "developmentClient"
       }
     },
     "preview": {
@@ -22,55 +18,21 @@
       "env": {
         "NODE_ENV": "production"
       },
-      "ios": {
-        "resourceClass": "m1-medium",
-        "simulator": true
-      },
       "android": {
-        "buildType": "apk",
-        "gradleCommand": ":app:assembleRelease",
-        "image": "latest"
-      }
-    },
-    "production-ios": {
-      "env": {
-        "NODE_ENV": "production"
-      },
-      "ios": {
-        "resourceClass": "m1-medium"
-      }
-    },
-    "production-android": {
-      "env": {
-        "NODE_ENV": "production"
-      },
-      "android": {
-        "buildType": "aab",
-        "gradleCommand": ":app:bundleRelease",
-        "image": "latest"
+        "buildType": "apk"
       }
     },
     "production": {
       "env": {
         "NODE_ENV": "production"
       },
-      "ios": {
-        "resourceClass": "m1-medium"
-      },
       "android": {
-        "buildType": "aab",
-        "gradleCommand": ":app:bundleRelease",
-        "image": "latest"
+        "buildType": "aab"
       }
     }
   },
   "submit": {
     "production": {
-      "ios": {
-        "appleId": "your-apple-id@example.com",
-        "ascAppId": "your-app-store-connect-app-id",
-        "appleTeamId": "your-apple-team-id"
-      },
       "android": {
         "serviceAccountKeyPath": "./path/to/api-key.json",
         "track": "internal"

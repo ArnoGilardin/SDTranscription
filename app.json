@@ -36,7 +36,6 @@
       "targetSdkVersion": 34,
       "minSdkVersion": 21,
       "buildToolsVersion": "34.0.0",
-      "ndkVersion": "25.1.8937393",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#000000"
@@ -49,11 +48,7 @@
         "WRITE_EXTERNAL_STORAGE",
         "INTERNET",
         "ACCESS_NETWORK_STATE"
-      ],
-      "gradle": {
-        "enableProguardInReleaseBuilds": false,
-        "enableSeparateBuildPerCPUArchitecture": false
-      }
+      ]
     },
     "web": {
       "favicon": "./assets/images/favicon.png",
@@ -69,8 +64,7 @@
       ]
     ],
     "experiments": {
-      "typedRoutes": true,
-      "tsconfigPaths": true
+      "typedRoutes": false
     },
     "extra": {
       "router": {

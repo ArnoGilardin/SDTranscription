@@ -6,13 +6,21 @@ const config = getDefaultConfig(__dirname, {
   isCSSEnabled: true,
 });
 
-// Optimize for Android builds
-config.resolver.platforms = ['native', 'android', 'ios', 'web'];
-
-// Reduce memory usage during builds
+// Optimize for Android builds - reduce memory usage
 config.maxWorkers = 1;
 
-// Optimize transformer for Android
+// Simplify resolver to avoid conflicts
+config.resolver = {
+  ...config.resolver,
+  sourceExts: ['js', 'jsx', 'json', 'ts', 'tsx'],
+  assetExts: ['png', 'jpg', 'jpeg', 'gif', 'wav', 'mp4', 'm4a', 'ttf', 'otf'],
+  platforms: ['native', 'android', 'ios', 'web'],
+  alias: {
+    '@': __dirname,
+  },
+};
+
+// Optimize transformer for better Android compatibility
 config.transformer = {
   ...config.transformer,
   minifierConfig: {
@@ -23,17 +31,7 @@ config.transformer = {
   },
 };
 
-// Configure resolver to avoid conflicts
-config.resolver = {
-  ...config.resolver,
-  sourceExts: ['js', 'jsx', 'json', 'ts', 'tsx', 'cjs', 'mjs'],
-  assetExts: ['png', 'jpg', 'jpeg', 'gif', 'wav', 'mp4', 'm4a', 'ttf', 'otf', 'woff', 'woff2'],
-  alias: {
-    '@': __dirname,
-  },
-};
-
-// Disable experimental features that can cause Gradle issues
+// Disable experimental features that cause Gradle issues
 config.experimental = {
   ...config.experimental,
   tsconfigPaths: false,

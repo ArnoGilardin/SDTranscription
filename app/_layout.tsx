@@ -18,9 +18,21 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    // Prevent Android build issues with console warnings
-    if (Platform.OS === 'android' && __DEV__) {
-      console.disableYellowBox = true;
+    // Prevent build issues with console warnings
+    if (__DEV__) {
+      // Suppress non-critical warnings during development
+      const originalWarn = console.warn;
+      console.warn = (...args) => {
+        if (
+          typeof args[0] === 'string' &&
+          (args[0].includes('VirtualizedLists') ||
+           args[0].includes('componentWillReceiveProps') ||
+           args[0].includes('componentWillMount'))
+        ) {
+          return;
+        }
+        originalWarn(...args);
+      };
     }
   }, []);
   if (!fontsLoaded) {
