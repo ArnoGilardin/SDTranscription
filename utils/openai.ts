@@ -127,7 +127,7 @@ export async function transcribeAudioRemote(
         console.log(`Attempting transcription (attempt ${attempt}/${maxRetries})`);
         
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort({ reason: 'timeout' }), 60000); // Increased timeout to 60 seconds
+        const timeoutId = setTimeout(() => controller.abort({ reason: 'timeout' }), 600000); // 10 minutes timeout for remote API
 
         const response = await fetch(apiUrl, {
           method: 'POST',
@@ -336,7 +336,7 @@ export async function transcribeAudio(audioData: string | Blob, speakers: any[],
         console.log(`Attempting OpenAI transcription (attempt ${attempt}/${maxRetries})`);
         
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort({ reason: 'timeout' }), 120000); // 120 second timeout
+        const timeoutId = setTimeout(() => controller.abort({ reason: 'timeout' }), 600000); // 10 minutes timeout for OpenAI API
 
         const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
           method: 'POST',
