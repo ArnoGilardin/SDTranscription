@@ -1,56 +1,16 @@
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, Platform } from 'react-native';
-import { FileAudio, Trash2, Play, Pause } from 'lucide-react-native';
+import { FileAudio, Trash2 } from 'lucide-react-native';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useRecordingsStore, Recording } from '@/stores/recordingsStore';
-import { useState, useEffect, useRef } from 'react';
-import { Audio } from 'expo-av';
+import { useState } from 'react';
 import { THEME } from '@/constants/theme';
-
-// Helper function to convert Base64 to Blob URL for web playback
-const base64ToBlobUrl = (base64: string): string => {
-  if (!base64.startsWith('data:')) {
-    return base64; // Not a Base64 string, return as-is
-  }
-  
-  try {
-    const response = fetch(base64);
-    return base64; // For now, return the Base64 directly as it can be used as src
-  } catch (error) {
-    console.error('Error converting Base64 to blob URL:', error);
-    return base64;
-  }
-};
+import AudioPlayer from '@/components/AudioPlayer';
 
 export default function LibraryScreen() {
   const { t } = useLanguage();
   const recordings = useRecordingsStore((state) => state.recordings);
   const deleteRecording = useRecordingsStore((state) => state.deleteRecording);
   const [playingId, setPlayingId] = useState<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const soundRef = useRef<Audio.Sound | null>(null);
-  const webAudioRef = useRef<HTMLAudioElement | null>(null);
-
-  useEffect(() => {
-    return () => {
-      cleanupAudio();
-    };
-  }, []);
-
-  const cleanupAudio = () => {
-    if (Platform.OS === 'web') {
-      if (webAudioRef.current) {
-        webAudioRef.current.pause();
-        webAudioRef.current.src = '';
-        webAudioRef.current.load();
-        webAudioRef.current = null;
-      }
-    } else {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
-        soundRef.current = null;
-      }
-    }
-  };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -78,13 +38,6 @@ export default function LibraryScreen() {
             style: 'destructive',
             onPress: async () => {
               try {
-                // Stop playback if this recording is playing
-                if (playingId === recording.id) {
-                  cleanupAudio();
-                  setPlayingId(null);
-                  setIsPlaying(false);
-                }
-                
                 // Delete the recording
                 deleteRecording(recording.id);
               } catch (error) {
@@ -102,103 +55,11 @@ export default function LibraryScreen() {
     }
   };
 
-  const handlePlayPause = async (recording: Recording) => {
-    try {
-      if (Platform.OS === 'web') {
-        if (!webAudioRef.current) {
-          webAudioRef.current = new window.Audio();
-          
-          webAudioRef.current.onended = () => {
-            setPlayingId(null);
-            setIsPlaying(false);
-          };
-
-          webAudioRef.current.onerror = () => {
-            console.error('Audio playback error');
-            Alert.alert(t('library.playbackError'));
-            setPlayingId(null);
-            setIsPlaying(false);
-          };
-        }
-
-        if (playingId === recording.id && isPlaying) {
-          webAudioRef.current.pause();
-          setIsPlaying(false);
-        } else {
-          if (playingId && playingId !== recording.id) {
-            // Properly cleanup existing audio before creating new one
-            webAudioRef.current.pause();
-            webAudioRef.current.src = '';
-            webAudioRef.current.load();
-            webAudioRef.current = new window.Audio();
-            
-            webAudioRef.current.onended = () => {
-              setPlayingId(null);
-              setIsPlaying(false);
-            };
-
-            webAudioRef.current.onerror = () => {
-              console.error('Audio playback error');
-              Alert.alert(t('library.playbackError'));
-              setPlayingId(null);
-              setIsPlaying(false);
-            };
-          }
-          
-          // Convert Base64 to usable URL if needed
-          const audioUrl = base64ToBlobUrl(recording.uri);
-          webAudioRef.current.src = audioUrl;
-          
-          try {
-            await webAudioRef.current.play();
-            setPlayingId(recording.id);
-            setIsPlaying(true);
-          } catch (error) {
-            console.error('Playback error:', error);
-            Alert.alert(t('library.playbackError'));
-            setPlayingId(null);
-            setIsPlaying(false);
-          }
-        }
-      } else {
-        if (!soundRef.current) {
-          const { sound } = await Audio.Sound.createAsync(
-            { uri: recording.uri },
-            { shouldPlay: false }
-          );
-          soundRef.current = sound;
-
-          sound.setOnPlaybackStatusUpdate((status: any) => {
-            if (status.didJustFinish) {
-              setPlayingId(null);
-              setIsPlaying(false);
-            }
-          });
-        }
-
-        if (playingId === recording.id && isPlaying) {
-          await soundRef.current.pauseAsync();
-          setIsPlaying(false);
-        } else {
-          if (playingId && playingId !== recording.id) {
-            await soundRef.current.unloadAsync();
-            const { sound } = await Audio.Sound.createAsync(
-              { uri: recording.uri },
-              { shouldPlay: false }
-            );
-            soundRef.current = sound;
-          }
-
-          await soundRef.current.playAsync();
-          setPlayingId(recording.id);
-          setIsPlaying(true);
-        }
-      }
-    } catch (error) {
-      console.error('Error playing sound:', error);
-      Alert.alert(t('library.playbackError'));
+  const handlePlayStateChange = (recordingId: string) => (isPlaying: boolean) => {
+    if (isPlaying) {
+      setPlayingId(recordingId);
+    } else if (playingId === recordingId) {
       setPlayingId(null);
-      setIsPlaying(false);
     }
   };
 
@@ -218,21 +79,17 @@ export default function LibraryScreen() {
         )}
         renderItem={({ item }) => (
           <View style={styles.recordingItem}>
-            <TouchableOpacity 
-              style={styles.playButton}
-              onPress={() => handlePlayPause(item)}
-            >
-              {playingId === item.id && isPlaying ? (
-                <Pause size={24} color={THEME.colors.accent} />
-              ) : (
-                <Play size={24} color={THEME.colors.accent} />
-              )}
-            </TouchableOpacity>
             <View style={styles.recordingInfo}>
               <Text style={styles.recordingTitle}>{item.title}</Text>
               <Text style={styles.recordingMeta}>
                 {formatDate(item.date)} • {formatDuration(item.duration)}
               </Text>
+              <AudioPlayer
+                uri={item.uri}
+                title={item.title}
+                duration={item.duration}
+                onPlayStateChange={handlePlayStateChange(item.id)}
+              />
             </View>
             <TouchableOpacity 
               style={styles.deleteButton}
@@ -285,8 +142,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   recordingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'column',
     backgroundColor: THEME.colors.cardBackground,
     padding: THEME.spacing.md,
     borderRadius: THEME.borderRadius.md,
@@ -294,17 +150,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: THEME.colors.cardBorder,
   },
-  playButton: {
-    width: 40,
-    height: 40,
-    borderRadius: THEME.borderRadius.full,
-    backgroundColor: THEME.colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   recordingInfo: {
     flex: 1,
-    marginLeft: THEME.spacing.md,
+    marginBottom: THEME.spacing.sm,
   },
   recordingTitle: {
     ...THEME.typography.body,
@@ -315,6 +163,9 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     padding: THEME.spacing.sm,
-    marginLeft: THEME.spacing.sm,
+    alignSelf: 'flex-end',
+    position: 'absolute',
+    top: THEME.spacing.md,
+    right: THEME.spacing.md,
   },
 });

@@ -1,19 +1,15 @@
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Platform, ScrollView, Alert } from 'react-native';
-import { FileText, RefreshCcw, Download, Share2, Play, Pause, TriangleAlert as AlertTriangle, Settings } from 'lucide-react-native';
+import { FileText, RefreshCcw, Download, Share2, TriangleAlert as AlertTriangle, Settings } from 'lucide-react-native';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useRecordingsStore } from '@/stores/recordingsStore';
 import { transcribeAudio, transcribeAudioRemote } from '@/utils/openai';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { jsPDF } from 'jspdf';
-import Animated, { 
-  useAnimatedStyle, 
-  withTiming,
-  useSharedValue,
-} from 'react-native-reanimated';
 import { THEME } from '@/constants/theme';
 import { router } from 'expo-router';
+import AudioPlayer from '@/components/AudioPlayer';
 
 const UPLOADS_DIRECTORY = `${FileSystem.documentDirectory}uploads/`;
 
@@ -36,55 +32,34 @@ const base64ToBlob = (base64: string): Blob => {
   return new Blob([byteArray], { type: mimeType });
 };
 
-// Helper function to convert Base64 to Blob URL for web playback
-const base64ToBlobUrl = (base64: string): string => {
-  if (!base64.startsWith('data:')) {
-    return base64; // Not a Base64 string, return as-is
-  }
-  
-  try {
-    return base64; // Base64 data URLs can be used directly as audio src
-  } catch (error) {
-    console.error('Error handling Base64 URL:', error);
-    return base64;
-  }
-};
-
 export default function TranscriptsScreen() {
   const { t } = useLanguage();
   const { recordings, updateTranscript, transcriptionSettings } = useRecordingsStore();
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [serviceStatus, setServiceStatus] = useState<'unknown' | 'available' | 'unavailable'>('unknown');
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
-  const currentTimeRef = useRef<number>(0);
-  const progressValue = useSharedValue(0);
-  const eventListenersRef = useRef<{ [key: string]: EventListener }>({});
 
-  useEffect(() => {
+  const initializeComponent = async () => {
     // Create uploads directory if it doesn't exist
-    (async () => {
-      if (Platform.OS !== 'web') {
-        try {
-          const dirInfo = await FileSystem.getInfoAsync(UPLOADS_DIRECTORY);
-          if (!dirInfo.exists) {
-            await FileSystem.makeDirectoryAsync(UPLOADS_DIRECTORY, { intermediates: true });
-          }
-        } catch (error) {
-          console.error('Error creating uploads directory:', error);
+    if (Platform.OS !== 'web') {
+      try {
+        const dirInfo = await FileSystem.getInfoAsync(UPLOADS_DIRECTORY);
+        if (!dirInfo.exists) {
+          await FileSystem.makeDirectoryAsync(UPLOADS_DIRECTORY, { intermediates: true });
         }
+      } catch (error) {
+        console.error('Error creating uploads directory:', error);
       }
-    })();
+    }
 
     // Check service status on mount
     checkServiceStatus();
+  };
 
-    return () => {
-      cleanupAudio();
-    };
+  React.useEffect(() => {
+    initializeComponent();
   }, []);
 
   const checkServiceStatus = async () => {
@@ -113,82 +88,6 @@ export default function TranscriptsScreen() {
     }
   };
 
-  const setupAudioEventListeners = () => {
-    if (!audioRef.current) return;
-
-    const handleTimeUpdate = () => {
-      if (!audioRef.current) return;
-      currentTimeRef.current = audioRef.current.currentTime;
-      const progress = (audioRef.current.currentTime / audioRef.current.duration) * 100;
-      if (!isNaN(progress)) {
-        progressValue.value = withTiming(progress);
-      }
-    };
-
-    const handleEnded = () => {
-      setPlayingId(null);
-      setIsPlaying(false);
-      progressValue.value = withTiming(0);
-    };
-
-    const handleError = (e: Event) => {
-      console.error('Audio playback error:', e);
-      setError(t('transcripts.playbackError'));
-      setPlayingId(null);
-      setIsPlaying(false);
-    };
-
-    const handleLoadedData = () => {
-      // Audio is ready to play
-      if (audioRef.current && isPlaying) {
-        audioRef.current.play().catch((error) => {
-          console.error('Playback error:', error);
-          setError(t('transcripts.playbackError'));
-          setPlayingId(null);
-          setIsPlaying(false);
-        });
-      }
-    };
-
-    // Store event listeners for cleanup
-    eventListenersRef.current = {
-      timeupdate: handleTimeUpdate as EventListener,
-      ended: handleEnded as EventListener,
-      error: handleError as EventListener,
-      loadeddata: handleLoadedData as EventListener,
-    };
-
-    // Add event listeners
-    Object.entries(eventListenersRef.current).forEach(([event, listener]) => {
-      audioRef.current?.addEventListener(event, listener);
-    });
-  };
-
-  const cleanupAudio = () => {
-    if (audioRef.current) {
-      // Remove event listeners
-      Object.entries(eventListenersRef.current).forEach(([event, listener]) => {
-        audioRef.current?.removeEventListener(event, listener);
-      });
-      
-      // Pause and clear source
-      audioRef.current.pause();
-      audioRef.current.src = '';
-      audioRef.current.load(); // Force cleanup of internal state
-      
-      // Nullify the audio reference to prevent stale references
-      audioRef.current = null;
-      
-      // Clear event listeners reference
-      eventListenersRef.current = {};
-    }
-    
-    // Reset state values
-    setPlayingId(null);
-    setIsPlaying(false);
-    progressValue.value = 0;
-  };
-
   const saveTranscriptToFile = async (recording: any, transcript: string) => {
     if (Platform.OS === 'web') {
       return; // Skip file saving on web for now
@@ -208,41 +107,11 @@ export default function TranscriptsScreen() {
     }
   };
 
-  const handlePlayPause = async (recording: any) => {
-    try {
-      if (Platform.OS !== 'web') {
-        console.error('Audio playback only supported on web');
-        return;
-      }
-
-      // If the same recording is playing, pause it
-      if (playingId === recording.id && isPlaying && audioRef.current) {
-        audioRef.current.pause();
-        setIsPlaying(false);
-        return;
-      }
-
-      // Complete cleanup of existing audio element before creating new one
-      cleanupAudio();
-
-      // Create a fresh audio element
-      audioRef.current = new Audio();
-      setupAudioEventListeners();
-
-      // Convert Base64 to usable URL if needed
-      const audioUrl = base64ToBlobUrl(recording.uri);
-      audioRef.current.src = audioUrl;
-      audioRef.current.load();
-      
-      setPlayingId(recording.id);
-      setIsPlaying(true);
-      
-      // The actual play will be triggered by the loadeddata event listener
-    } catch (error) {
-      console.error('Error playing sound:', error);
-      setError(t('transcripts.playbackError'));
+  const handlePlayStateChange = (recordingId: string) => (isPlaying: boolean) => {
+    if (isPlaying) {
+      setPlayingId(recordingId);
+    } else if (playingId === recordingId) {
       setPlayingId(null);
-      setIsPlaying(false);
     }
   };
 
@@ -345,10 +214,6 @@ export default function TranscriptsScreen() {
       setProcessingId(null);
     }
   };
-
-  const progressStyle = useAnimatedStyle(() => ({
-    width: `${progressValue.value}%`,
-  }));
 
   const exportTranscript = async (recording: any, format: 'txt' | 'pdf') => {
     try {
@@ -509,25 +374,12 @@ export default function TranscriptsScreen() {
                     {new Date(item.date).toLocaleDateString()}
                   </Text>
                   
-                  {Platform.OS === 'web' && (
-                    <View style={styles.playerContainer}>
-                      <TouchableOpacity
-                        style={styles.playButton}
-                        onPress={() => handlePlayPause(item)}>
-                        {playingId === item.id && isPlaying ? (
-                          <Pause size={20} color={THEME.colors.accent} />
-                        ) : (
-                          <Play size={20} color={THEME.colors.accent} />
-                        )}
-                      </TouchableOpacity>
-                      
-                      <View style={styles.progressBar}>
-                        <Animated.View 
-                          style={[styles.progressFill, progressStyle]} 
-                        />
-                      </View>
-                    </View>
-                  )}
+                  <AudioPlayer
+                    uri={item.uri}
+                    title={item.title}
+                    duration={item.duration}
+                    onPlayStateChange={handlePlayStateChange(item.id)}
+                  />
 
                   <ScrollView
                     ref={scrollViewRef}
@@ -737,32 +589,6 @@ const styles = StyleSheet.create({
   transcriptDate: {
     ...THEME.typography.caption,
     marginBottom: THEME.spacing.sm,
-  },
-  playerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: THEME.spacing.md,
-  },
-  playButton: {
-    width: 36,
-    height: 36,
-    borderRadius: THEME.borderRadius.full,
-    backgroundColor: THEME.colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: THEME.spacing.md,
-  },
-  progressBar: {
-    flex: 1,
-    height: 4,
-    backgroundColor: THEME.colors.cardBorder,
-    borderRadius: THEME.borderRadius.sm,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: THEME.colors.accent,
-    borderRadius: THEME.borderRadius.sm,
   },
   transcriptContainer: {
     maxHeight: 200,
