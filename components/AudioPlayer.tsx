@@ -199,10 +199,25 @@ export default function AudioPlayer({ uri, title, duration, onPlayStateChange }:
   const handleProgressPress = (event: any) => {
     if (Platform.OS !== 'web') return;
     
+    // Validate audio element and its duration
+    if (!audioRef.current || !isFinite(audioRef.current.duration) || audioRef.current.duration <= 0) {
+      return;
+    }
+    
     const { locationX, target } = event.nativeEvent;
+    
+    // Validate target width
+    if (!target || !target.offsetWidth || target.offsetWidth <= 0) {
+      return;
+    }
+    
     const width = target.offsetWidth;
     const percentage = (locationX / width) * 100;
-    seekTo(Math.max(0, Math.min(100, percentage)));
+    
+    // Validate percentage is finite
+    if (isFinite(percentage)) {
+      seekTo(Math.max(0, Math.min(100, percentage)));
+    }
   };
 
   const downloadAudio = async () => {
