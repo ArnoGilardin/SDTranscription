@@ -1,15 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Platform, ScrollView, Alert } from 'react-native';
-import { FileText, RefreshCcw, Download, Share2, TriangleAlert as AlertTriangle, Settings } from 'lucide-react-native';
+import { FileText, RefreshCcw, TriangleAlert as AlertTriangle, Settings } from 'lucide-react-native';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useRecordingsStore } from '@/stores/recordingsStore';
 import { transcribeAudio, transcribeAudioRemote } from '@/utils/openai';
 import { useState, useRef } from 'react';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
-import { jsPDF } from 'jspdf';
 import { THEME } from '@/constants/theme';
 import { router } from 'expo-router';
+import TextEditor from '@/components/TextEditor';
 import AudioPlayer from '@/components/AudioPlayer';
 
 const UPLOADS_DIRECTORY = `${FileSystem.documentDirectory}uploads/`;
@@ -207,63 +205,8 @@ export default function TranscriptsScreen() {
     }
   };
 
-  const exportTranscript = async (recording: any, format: 'txt' | 'pdf') => {
-    try {
-      if (!recording.transcript) {
-        throw new Error(t('transcripts.noTranscriptToExport'));
-      }
-
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const fileName = `transcript-${timestamp}`;
-
-      if (Platform.OS === 'web') {
-        if (format === 'txt') {
-          const blob = new Blob([recording.transcript], { type: 'text/plain' });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = `${fileName}.txt`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-        } else {
-          const pdf = new jsPDF();
-          pdf.setFontSize(16);
-          pdf.text(recording.title, 20, 20);
-          pdf.setFontSize(12);
-          pdf.text(new Date(recording.date).toLocaleString(), 20, 30);
-          const splitText = pdf.splitTextToSize(recording.transcript, 170);
-          pdf.text(splitText, 20, 40);
-          pdf.save(`${fileName}.pdf`);
-        }
-      } else {
-        const fileUri = `${FileSystem.documentDirectory}${fileName}.${format}`;
-        
-        if (format === 'txt') {
-          await FileSystem.writeAsStringAsync(fileUri, recording.transcript);
-        } else {
-          const pdf = new jsPDF();
-          pdf.setFontSize(16);
-          pdf.text(recording.title, 20, 20);
-          pdf.setFontSize(12);
-          pdf.text(new Date(recording.date).toLocaleString(), 20, 30);
-          const splitText = pdf.splitTextToSize(recording.transcript, 170);
-          pdf.text(splitText, 20, 40);
-          const pdfBytes = pdf.output();
-          await FileSystem.writeAsStringAsync(fileUri, pdfBytes, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
-        }
-
-        if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(fileUri);
-        }
-      }
-    } catch (err: any) {
-      console.error('Export error:', err);
-      setError(t('transcripts.exportError'));
-    }
+  const handleTranscriptSave = (id: string) => (newText: string) => {
+    updateTranscript(id, newText);
   };
 
   const getTranscriptionModeText = () => {
@@ -366,29 +309,11 @@ export default function TranscriptsScreen() {
                     {new Date(item.date).toLocaleDateString()}
                   </Text>
                   
-                  <ScrollView
-                    ref={scrollViewRef}
-                    style={styles.transcriptContainer}
-                    showsVerticalScrollIndicator={false}>
-                    <Text style={styles.transcriptText}>
-                      {item.transcript}
-                    </Text>
-                  </ScrollView>
-
-                  <View style={styles.exportButtons}>
-                    <TouchableOpacity
-                      style={styles.exportButton}
-                      onPress={() => exportTranscript(item, 'txt')}>
-                      <Download size={16} color={THEME.colors.accent} />
-                      <Text style={styles.exportButtonText}>TXT</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.exportButton}
-                      onPress={() => exportTranscript(item, 'pdf')}>
-                      <Share2 size={16} color={THEME.colors.accent} />
-                      <Text style={styles.exportButtonText}>PDF</Text>
-                    </TouchableOpacity>
-                  </View>
+                  <TextEditor
+                    text={item.transcript}
+                    title={item.title}
+                    onSave={handleTranscriptSave(item.id)}
+                  />
                 </>
               ) : (
                 <TouchableOpacity
@@ -575,17 +500,6 @@ const styles = StyleSheet.create({
     ...THEME.typography.caption,
     marginBottom: THEME.spacing.sm,
   },
-  transcriptContainer: {
-    maxHeight: 200,
-    backgroundColor: THEME.colors.background,
-    borderRadius: THEME.borderRadius.md,
-    padding: THEME.spacing.md,
-    marginBottom: THEME.spacing.md,
-  },
-  transcriptText: {
-    ...THEME.typography.body,
-    lineHeight: 24,
-  },
   transcribeButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -612,23 +526,5 @@ const styles = StyleSheet.create({
   },
   loader: {
     marginRight: THEME.spacing.sm,
-  },
-  exportButtons: {
-    flexDirection: 'row',
-    marginTop: THEME.spacing.md,
-    gap: THEME.spacing.sm,
-  },
-  exportButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: THEME.colors.background,
-    padding: THEME.spacing.sm,
-    borderRadius: THEME.borderRadius.md,
-    gap: THEME.spacing.xs,
-  },
-  exportButtonText: {
-    ...THEME.typography.caption,
-    color: THEME.colors.accent,
-    fontWeight: '600',
   },
 });
