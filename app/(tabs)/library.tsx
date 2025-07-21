@@ -93,11 +93,17 @@ export default function LibraryScreen() {
     try {
       if (Platform.OS === 'web') {
         if (navigator.share) {
-          await navigator.share({
-            title: recording.title,
-            text: `Écoutez cet enregistrement : ${recording.title}`,
-            url: window.location.href
-          });
+          try {
+            await navigator.share({
+              title: recording.title,
+              text: `Écoutez cet enregistrement : ${recording.title}`,
+              url: window.location.href
+            });
+          } catch (shareError) {
+            // Fallback to clipboard if share fails
+            await navigator.clipboard.writeText(window.location.href);
+            Alert.alert('Lien copié', 'Le lien a été copié dans le presse-papiers !');
+          }
         } else {
           await navigator.clipboard.writeText(window.location.href);
           Alert.alert('Lien copié', 'Le lien a été copié dans le presse-papiers !');

@@ -258,11 +258,17 @@ export default function AudioPlayer({ uri, title, duration, onPlayStateChange }:
     try {
       if (Platform.OS === 'web') {
         if (navigator.share) {
-          await navigator.share({
-            title: title,
-            text: `Écoutez cet enregistrement audio : ${title}`,
-            url: window.location.href
-          });
+          try {
+            await navigator.share({
+              title: title,
+              text: `Écoutez cet enregistrement audio : ${title}`,
+              url: window.location.href
+            });
+          } catch (shareError) {
+            // Fallback to clipboard if share fails
+            await navigator.clipboard.writeText(window.location.href);
+            Alert.alert('Lien copié', 'Le lien a été copié dans le presse-papiers !');
+          }
         } else {
           // Fallback: copy to clipboard
           await navigator.clipboard.writeText(window.location.href);
