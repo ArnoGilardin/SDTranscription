@@ -34,11 +34,12 @@ export default function TextEditor({ text, title, onSave, readOnly = false }: Te
   const [wordCount, setWordCount] = useState(0);
   const [charCount, setCharCount] = useState(0);
   const [selectedText, setSelectedText] = useState('');
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const textInputRef = useRef<TextInput>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   
   const editingValue = useSharedValue(0);
-  const formattingValue = useSharedValue(0);
+  const advancedValue = useSharedValue(0);
 
   useEffect(() => {
     setEditedText(text);
@@ -50,8 +51,8 @@ export default function TextEditor({ text, title, onSave, readOnly = false }: Te
   }, [isEditing]);
 
   useEffect(() => {
-    formattingValue.value = withTiming(showFormatting ? 1 : 0);
-  }, [showFormatting]);
+    advancedValue.value = withTiming(showAdvancedOptions ? 1 : 0);
+  }, [showAdvancedOptions]);
 
   const updateCounts = (textContent: string) => {
     const words = textContent.trim().split(/\s+/).filter(word => word.length > 0);
@@ -183,57 +184,109 @@ export default function TextEditor({ text, title, onSave, readOnly = false }: Te
     ),
   }));
 
-  const formattingStyle = useAnimatedStyle(() => ({
-    height: withTiming(showFormatting ? 'auto' : 0),
-    opacity: withTiming(showFormatting ? 1 : 0),
+  const advancedStyle = useAnimatedStyle(() => ({
+    height: withTiming(showAdvancedOptions ? 'auto' : 0),
+    opacity: withTiming(showAdvancedOptions ? 1 : 0),
   }));
 
   return (
     <View style={styles.container}>
-      {/* Header with actions */}
+      {/* Compact Toolbar */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Type size={20} color={THEME.colors.accent} />
-          <Text style={styles.headerTitle}>Éditeur de texte</Text>
-        </View>
-        
-        <View style={styles.headerActions}>
-          {!readOnly && (
+        <View style={styles.compactToolbar}>
+          {/* Font Size */}
+          <View style={styles.toolGroup}>
+            {FONT_SIZES.slice(0, 4).map((size) => (
+              <TouchableOpacity
+                key={size}
+                style={[
+                  styles.compactButton,
+                  fontSize === size && styles.compactButtonActive
+                ]}
+                onPress={() => setFontSize(size)}
+              >
+                <Text style={[
+                  styles.compactButtonText,
+                  fontSize === size && styles.compactButtonTextActive
+                ]}>
+                  {size}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Alignment */}
+          <View style={styles.toolGroup}>
             <TouchableOpacity
-              style={styles.headerButton}
-              onPress={() => setShowFormatting(!showFormatting)}
+              style={[
+                styles.compactButton,
+                textAlign === 'left' && styles.compactButtonActive
+              ]}
+              onPress={() => setTextAlign('left')}
             >
-              <Bold size={18} color={THEME.colors.accent} />
+              <AlignLeft size={14} color={textAlign === 'left' ? '#FFF' : THEME.colors.text} />
             </TouchableOpacity>
-          )}
-          
+            <TouchableOpacity
+              style={[
+                styles.compactButton,
+                textAlign === 'center' && styles.compactButtonActive
+              ]}
+              onPress={() => setTextAlign('center')}
+            >
+              <AlignCenter size={14} color={textAlign === 'center' ? '#FFF' : THEME.colors.text} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.compactButton,
+                textAlign === 'justify' && styles.compactButtonActive
+              ]}
+              onPress={() => setTextAlign('justify')}
+            >
+              <AlignJustify size={14} color={textAlign === 'justify' ? '#FFF' : THEME.colors.text} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Search */}
+          <View style={styles.toolGroup}>
+            <TouchableOpacity
+              style={[styles.compactButton, showSearch && styles.compactButtonActive]}
+              onPress={() => setShowSearch(!showSearch)}
+            >
+              <Search size={14} color={showSearch ? '#FFF' : THEME.colors.accent} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Actions */}
+          <View style={styles.toolGroup}>
+            <TouchableOpacity
+              style={styles.compactButton}
+              onPress={handleCopy}
+            >
+              <Copy size={14} color={THEME.colors.accent} />
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={styles.compactButton}
+              onPress={handleExport}
+            >
+              <Download size={14} color={THEME.colors.accent} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Advanced Options Toggle */}
           <TouchableOpacity
-            style={styles.headerButton}
-            onPress={() => setShowSearch(!showSearch)}
+            style={[styles.compactButton, showAdvancedOptions && styles.compactButtonActive]}
+            onPress={() => setShowAdvancedOptions(!showAdvancedOptions)}
           >
-            <Search size={18} color={THEME.colors.accent} />
+            <Type size={14} color={showAdvancedOptions ? '#FFF' : THEME.colors.accent} />
           </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={styles.headerButton}
-            onPress={handleCopy}
-          >
-            <Copy size={18} color={THEME.colors.accent} />
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={styles.headerButton}
-            onPress={handleExport}
-          >
-            <Download size={18} color={THEME.colors.accent} />
-          </TouchableOpacity>
-          
+
           {!readOnly && (
             <TouchableOpacity
-              style={[styles.headerButton, isEditing && styles.editingButton]}
+              style={[styles.compactButton, styles.editButton, isEditing && styles.editButtonActive]}
               onPress={() => setIsEditing(!isEditing)}
             >
-              <Edit3 size={18} color={isEditing ? '#FFF' : THEME.colors.accent} />
+              <Edit3 size={14} color={isEditing ? '#FFF' : THEME.colors.accent} />
             </TouchableOpacity>
           )}
         </View>
@@ -248,7 +301,7 @@ export default function TextEditor({ text, title, onSave, readOnly = false }: Te
 
       {/* Search Panel */}
       {showSearch && (
-        <Animated.View style={styles.searchPanel}>
+        <View style={styles.searchPanel}>
           <View style={styles.searchRow}>
             <TextInput
               style={styles.searchInput}
@@ -286,100 +339,74 @@ export default function TextEditor({ text, title, onSave, readOnly = false }: Te
               <Text style={styles.replaceAllText}>Tout</Text>
             </TouchableOpacity>
           </View>
-        </Animated.View>
+        </View>
       )}
 
-      {/* Formatting Panel */}
-      {showFormatting && (
-        <Animated.View style={[styles.formattingPanel, formattingStyle]}>
-          <View style={styles.formattingSection}>
-            <Text style={styles.formattingLabel}>Taille de police</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.formattingOptions}>
-                {FONT_SIZES.map((size) => (
-                  <TouchableOpacity
-                    key={size}
-                    style={[
-                      styles.formattingButton,
-                      fontSize === size && styles.formattingButtonActive
-                    ]}
-                    onPress={() => setFontSize(size)}
-                  >
-                    <Text style={[
-                      styles.formattingButtonText,
-                      fontSize === size && styles.formattingButtonTextActive
-                    ]}>
-                      {size}px
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+      {/* Advanced Options Panel */}
+      {showAdvancedOptions && (
+        <Animated.View style={[styles.advancedPanel, advancedStyle]}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={styles.advancedRow}>
+              {/* All Font Sizes */}
+              <View style={styles.advancedGroup}>
+                <Text style={styles.advancedLabel}>Taille</Text>
+                <View style={styles.advancedOptions}>
+                  {FONT_SIZES.map((size) => (
+                    <TouchableOpacity
+                      key={size}
+                      style={[
+                        styles.advancedButton,
+                        fontSize === size && styles.advancedButtonActive
+                      ]}
+                      onPress={() => setFontSize(size)}
+                    >
+                      <Text style={[
+                        styles.advancedButtonText,
+                        fontSize === size && styles.advancedButtonTextActive
+                      ]}>
+                        {size}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </View>
-            </ScrollView>
-          </View>
 
-          <View style={styles.formattingSection}>
-            <Text style={styles.formattingLabel}>Interligne</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.formattingOptions}>
-                {LINE_HEIGHTS.map((height) => (
-                  <TouchableOpacity
-                    key={height}
-                    style={[
-                      styles.formattingButton,
-                      lineHeight === height && styles.formattingButtonActive
-                    ]}
-                    onPress={() => setLineHeight(height)}
-                  >
-                    <Text style={[
-                      styles.formattingButtonText,
-                      lineHeight === height && styles.formattingButtonTextActive
-                    ]}>
-                      {height}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+              {/* Line Heights */}
+              <View style={styles.advancedGroup}>
+                <Text style={styles.advancedLabel}>Interligne</Text>
+                <View style={styles.advancedOptions}>
+                  {LINE_HEIGHTS.map((height) => (
+                    <TouchableOpacity
+                      key={height}
+                      style={[
+                        styles.advancedButton,
+                        lineHeight === height && styles.advancedButtonActive
+                      ]}
+                      onPress={() => setLineHeight(height)}
+                    >
+                      <Text style={[
+                        styles.advancedButtonText,
+                        lineHeight === height && styles.advancedButtonTextActive
+                      ]}>
+                        {height}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </View>
-            </ScrollView>
-          </View>
 
-          <View style={styles.formattingSection}>
-            <Text style={styles.formattingLabel}>Alignement</Text>
-            <View style={styles.formattingOptions}>
-              <TouchableOpacity
-                style={[
-                  styles.formattingButton,
-                  textAlign === 'left' && styles.formattingButtonActive
-                ]}
-                onPress={() => setTextAlign('left')}
-              >
-                <AlignLeft size={16} color={textAlign === 'left' ? '#FFF' : THEME.colors.text} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.formattingButton,
-                  textAlign === 'center' && styles.formattingButtonActive
-                ]}
-                onPress={() => setTextAlign('center')}
-              >
-                <AlignCenter size={16} color={textAlign === 'center' ? '#FFF' : THEME.colors.text} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.formattingButton,
-                  textAlign === 'justify' && styles.formattingButtonActive
-                ]}
-                onPress={() => setTextAlign('justify')}
-              >
-                <AlignJustify size={16} color={textAlign === 'justify' ? '#FFF' : THEME.colors.text} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.resetButton}
-                onPress={resetFormatting}
-              >
-                <RotateCcw size={16} color={THEME.colors.accent} />
-              </TouchableOpacity>
+              {/* Reset */}
+              <View style={styles.advancedGroup}>
+                <Text style={styles.advancedLabel}>Reset</Text>
+                <TouchableOpacity
+                  style={styles.resetButton}
+                  onPress={resetFormatting}
+                >
+                  <RotateCcw size={16} color={THEME.colors.accent} />
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          </ScrollView>
         </Animated.View>
       )}
 
@@ -463,35 +490,52 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     padding: THEME.spacing.md,
     backgroundColor: THEME.colors.background,
     borderBottomWidth: 1,
     borderBottomColor: THEME.colors.cardBorder,
   },
-  headerLeft: {
+  compactToolbar: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
-  },
-  headerTitle: {
-    ...THEME.typography.body,
-    marginLeft: THEME.spacing.sm,
-    fontWeight: '600',
-  },
-  headerActions: {
-    flexDirection: 'row',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
     gap: THEME.spacing.sm,
   },
-  headerButton: {
-    padding: THEME.spacing.sm,
-    borderRadius: THEME.borderRadius.full,
+  toolGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: THEME.colors.cardBackground,
+    borderRadius: THEME.borderRadius.sm,
+    padding: 2,
   },
-  editingButton: {
+  compactButton: {
+    paddingHorizontal: THEME.spacing.sm,
+    paddingVertical: THEME.spacing.xs,
+    borderRadius: THEME.borderRadius.sm,
+    minWidth: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  compactButtonActive: {
     backgroundColor: THEME.colors.accent,
+  },
+  compactButtonText: {
+    ...THEME.typography.caption,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  compactButtonTextActive: {
+    color: '#FFF',
+  },
+  editButton: {
+    backgroundColor: THEME.colors.cardBackground,
+    borderWidth: 1,
+    borderColor: THEME.colors.accent,
+  },
+  editButtonActive: {
+    backgroundColor: THEME.colors.accent,
+    borderColor: THEME.colors.accent,
   },
   stats: {
     flexDirection: 'row',
@@ -501,6 +545,157 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.colors.background + '80',
   },
   statText: {
+    ...THEME.typography.caption,
+    fontSize: 12,
+  },
+  searchPanel: {
+    padding: THEME.spacing.md,
+    backgroundColor: THEME.colors.background,
+    borderBottomWidth: 1,
+    borderBottomColor: THEME.colors.cardBorder,
+    gap: THEME.spacing.sm,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: THEME.spacing.sm,
+  },
+  searchInput: {
+    flex: 1,
+    ...THEME.typography.body,
+    backgroundColor: THEME.colors.cardBackground,
+    borderRadius: THEME.borderRadius.sm,
+    padding: THEME.spacing.sm,
+    borderWidth: 1,
+    borderColor: THEME.colors.cardBorder,
+  },
+  searchButton: {
+    padding: THEME.spacing.sm,
+    borderRadius: THEME.borderRadius.sm,
+    backgroundColor: THEME.colors.accent + '20',
+  },
+  replaceAllText: {
+    ...THEME.typography.caption,
+    color: THEME.colors.accent,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  advancedPanel: {
+    padding: THEME.spacing.md,
+    backgroundColor: THEME.colors.background,
+    borderBottomWidth: 1,
+    borderBottomColor: THEME.colors.cardBorder,
+    overflow: 'hidden',
+  },
+  advancedRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: THEME.spacing.lg,
+  },
+  advancedGroup: {
+    alignItems: 'center',
+    gap: THEME.spacing.sm,
+  },
+  advancedLabel: {
+    ...THEME.typography.caption,
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  advancedOptions: {
+    flexDirection: 'row',
+    gap: THEME.spacing.xs,
+  },
+  advancedButton: {
+    padding: THEME.spacing.xs,
+    paddingHorizontal: THEME.spacing.sm,
+    borderRadius: THEME.borderRadius.sm,
+    backgroundColor: THEME.colors.cardBackground,
+    minWidth: 40,
+    alignItems: 'center',
+  },
+  advancedButtonActive: {
+    backgroundColor: THEME.colors.accent,
+  },
+  advancedButtonText: {
+    ...THEME.typography.caption,
+    fontSize: 11,
+  },
+  advancedButtonTextActive: {
+    color: '#FFF',
+    fontWeight: '600',
+  },
+  resetButton: {
+    padding: THEME.spacing.sm,
+    borderRadius: THEME.borderRadius.sm,
+    backgroundColor: THEME.colors.cardBackground,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  textContainer: {
+    flex: 1,
+    minHeight: 300,
+  },
+  editingContainer: {
+    flex: 1,
+  },
+  textInput: {
+    ...THEME.typography.body,
+    flex: 1,
+    padding: THEME.spacing.md,
+    textAlignVertical: 'top',
+    minHeight: 300,
+    color: THEME.colors.text,
+  },
+  editingActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: THEME.spacing.md,
+    backgroundColor: THEME.colors.background,
+    borderTopWidth: 1,
+    borderTopColor: THEME.colors.cardBorder,
+    gap: THEME.spacing.md,
+  },
+  cancelButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: THEME.spacing.md,
+    borderRadius: THEME.borderRadius.md,
+    backgroundColor: THEME.colors.cardBackground,
+    borderWidth: 1,
+    borderColor: THEME.colors.error,
+    gap: THEME.spacing.sm,
+  },
+  cancelButtonText: {
+    ...THEME.typography.button,
+    color: THEME.colors.error,
+  },
+  saveButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: THEME.spacing.md,
+    borderRadius: THEME.borderRadius.md,
+    backgroundColor: THEME.colors.accent,
+    gap: THEME.spacing.sm,
+  },
+  saveButtonText: {
+    ...THEME.typography.button,
+    color: '#FFF',
+  },
+  readOnlyContainer: {
+    flex: 1,
+    padding: THEME.spacing.md,
+  },
+  readOnlyText: {
+    ...THEME.typography.body,
+    lineHeight: 24,
+    color: THEME.colors.text,
+  },
+});
     ...THEME.typography.caption,
     fontSize: 12,
   },
