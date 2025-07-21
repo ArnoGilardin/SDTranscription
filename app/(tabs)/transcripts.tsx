@@ -10,7 +10,14 @@ import { router } from 'expo-router';
 import TextEditor from '@/components/TextEditor';
 import AudioPlayer from '@/components/AudioPlayer';
 
-const UPLOADS_DIRECTORY = `${FileSystem.documentDirectory}uploads/`;
+// Import FileSystem conditionally for native platforms
+let FileSystem: any = null;
+let UPLOADS_DIRECTORY = '';
+
+if (Platform.OS !== 'web') {
+  FileSystem = require('expo-file-system');
+  UPLOADS_DIRECTORY = `${FileSystem.documentDirectory}uploads/`;
+}
 
 // Helper function to convert Base64 to Blob for transcription
 const base64ToBlob = (base64: string): Blob => {
@@ -41,7 +48,7 @@ export default function TranscriptsScreen() {
 
   const initializeComponent = async () => {
     // Create uploads directory if it doesn't exist
-    if (Platform.OS !== 'web') {
+    if (Platform.OS !== 'web' && FileSystem && UPLOADS_DIRECTORY) {
       try {
         const dirInfo = await FileSystem.getInfoAsync(UPLOADS_DIRECTORY);
         if (!dirInfo.exists) {
@@ -87,7 +94,7 @@ export default function TranscriptsScreen() {
   };
 
   const saveTranscriptToFile = async (recording: any, transcript: string) => {
-    if (Platform.OS === 'web') {
+    if (Platform.OS === 'web' || !FileSystem || !UPLOADS_DIRECTORY) {
       return; // Skip file saving on web for now
     }
 
@@ -130,6 +137,10 @@ export default function TranscriptsScreen() {
           throw new Error('Erreur lors du traitement de l\'enregistrement audio.');
         }
       } else if (Platform.OS !== 'web') {
+        if (!FileSystem) {
+          throw new Error('File system not available');
+        }
+        
         const fileInfo = await FileSystem.getInfoAsync(uri);
         if (!fileInfo.exists) {
           throw new Error('Audio file not found');

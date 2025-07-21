@@ -6,7 +6,12 @@ import { useState } from 'react';
 import { THEME } from '@/constants/theme';
 import AudioPlayer from '@/components/AudioPlayer';
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
+
+// Import FileSystem conditionally for native platforms
+let FileSystem: any = null;
+if (Platform.OS !== 'web') {
+  FileSystem = require('expo-file-system');
+}
 
 export default function LibraryScreen() {
   const { t } = useLanguage();
@@ -71,6 +76,11 @@ export default function LibraryScreen() {
         Alert.alert('Téléchargement', 'Le fichier a été téléchargé avec succès !');
       } else {
         // Mobile download
+        if (!FileSystem) {
+          Alert.alert('Erreur', 'Téléchargement non disponible sur cette plateforme.');
+          return;
+        }
+        
         const fileName = `${recording.title.replace(/[^a-zA-Z0-9]/g, '_')}.m4a`;
         const fileUri = `${FileSystem.documentDirectory}${fileName}`;
         
@@ -109,6 +119,11 @@ export default function LibraryScreen() {
           Alert.alert('Lien copié', 'Le lien a été copié dans le presse-papiers !');
         }
       } else {
+        if (!FileSystem) {
+          Alert.alert('Erreur', 'Partage non disponible sur cette plateforme.');
+          return;
+        }
+        
         const fileName = `${recording.title.replace(/[^a-zA-Z0-9]/g, '_')}.m4a`;
         const fileUri = `${FileSystem.documentDirectory}${fileName}`;
         

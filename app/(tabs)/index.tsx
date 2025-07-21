@@ -13,12 +13,18 @@ import Animated, {
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useRecordingsStore, Speaker } from '@/stores/recordingsStore';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import { activateKeepAwakeAsync, deactivateKeepAwakeAsync } from 'expo-keep-awake';
 import { THEME } from '@/constants/theme';
 
-const RECORDINGS_DIRECTORY = `${FileSystem.documentDirectory}recordings/`;
+// Import FileSystem conditionally for native platforms
+let FileSystem: any = null;
+let RECORDINGS_DIRECTORY = '';
+
+if (Platform.OS !== 'web') {
+  FileSystem = require('expo-file-system');
+  RECORDINGS_DIRECTORY = `${FileSystem.documentDirectory}recordings/`;
+}
 
 const DEFAULT_COLORS = [
   '#EF4444', // Red
@@ -123,9 +129,11 @@ export default function RecordScreen() {
             playsInSilentModeIOS: true,
           });
 
-          const dirInfo = await FileSystem.getInfoAsync(RECORDINGS_DIRECTORY);
-          if (!dirInfo.exists) {
-            await FileSystem.makeDirectoryAsync(RECORDINGS_DIRECTORY, { intermediates: true });
+          if (FileSystem && RECORDINGS_DIRECTORY) {
+            const dirInfo = await FileSystem.getInfoAsync(RECORDINGS_DIRECTORY);
+            if (!dirInfo.exists) {
+              await FileSystem.makeDirectoryAsync(RECORDINGS_DIRECTORY, { intermediates: true });
+            }
           }
         } catch (err) {
           console.error('Error requesting permissions:', err);
@@ -201,6 +209,8 @@ export default function RecordScreen() {
 
   const saveRecordingToLibrary = async (uri: string) => {
     if (Platform.OS === 'web') return uri;
+
+    if (!FileSystem) return uri;
 
     try {
       const timestamp = new Date().getTime();
