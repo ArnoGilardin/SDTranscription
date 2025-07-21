@@ -1,10 +1,12 @@
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, Platform } from 'react-native';
-import { FileAudio, Trash2 } from 'lucide-react-native';
+import { FileAudio, Trash2, Download, Share2 } from 'lucide-react-native';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useRecordingsStore, Recording } from '@/stores/recordingsStore';
 import { useState } from 'react';
 import { THEME } from '@/constants/theme';
 import AudioPlayer from '@/components/AudioPlayer';
+import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system';
 
 export default function LibraryScreen() {
   const { t } = useLanguage();
@@ -55,6 +57,73 @@ export default function LibraryScreen() {
     }
   };
 
+  const handleDownload = async (recording: Recording) => {
+    try {
+      if (Platform.OS === 'web') {
+        // Web download
+        const link = document.createElement('a');
+        link.href = recording.uri;
+        link.download = `${recording.title.replace(/[^a-zA-Z0-9]/g, '_')}.webm`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        Alert.alert('Téléchargement', 'Le fichier a été téléchargé avec succès !');
+      } else {
+        // Mobile download
+        const fileName = `${recording.title.replace(/[^a-zA-Z0-9]/g, '_')}.m4a`;
+        const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+        
+        await FileSystem.copyAsync({
+          from: recording.uri,
+          to: fileUri
+        });
+
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(fileUri);
+        }
+      }
+    } catch (error) {
+      console.error('Download error:', error);
+      Alert.alert('Erreur', 'Impossible de télécharger le fichier.');
+    }
+  };
+
+  const handleShare = async (recording: Recording) => {
+    try {
+      if (Platform.OS === 'web') {
+        if (navigator.share) {
+          await navigator.share({
+            title: recording.title,
+            text: `Écoutez cet enregistrement : ${recording.title}`,
+            url: window.location.href
+          });
+        } else {
+          await navigator.clipboard.writeText(window.location.href);
+          Alert.alert('Lien copié', 'Le lien a été copié dans le presse-papiers !');
+        }
+      } else {
+        const fileName = `${recording.title.replace(/[^a-zA-Z0-9]/g, '_')}.m4a`;
+        const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+        
+        await FileSystem.copyAsync({
+          from: recording.uri,
+          to: fileUri
+        });
+
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(fileUri, {
+            mimeType: 'audio/m4a',
+            dialogTitle: `Partager ${recording.title}`
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Share error:', error);
+      Alert.alert('Erreur', 'Impossible de partager le fichier.');
+    }
+  };
+
   const handlePlayStateChange = (recordingId: string) => (isPlaying: boolean) => {
     if (isPlaying) {
       setPlayingId(recordingId);
@@ -80,10 +149,37 @@ export default function LibraryScreen() {
         renderItem={({ item }) => (
           <View style={styles.recordingItem}>
             <View style={styles.recordingInfo}>
-              <Text style={styles.recordingTitle}>{item.title}</Text>
-              <Text style={styles.recordingMeta}>
-                {formatDate(item.date)} • {formatDuration(item.duration)}
-              </Text>
+              <View style={styles.recordingHeader}>
+                <View style={styles.recordingTitleContainer}>
+                  <Text style={styles.recordingTitle}>{item.title}</Text>
+                  <Text style={styles.recordingMeta}>
+                    {formatDate(item.date)} • {formatDuration(item.duration)}
+                  </Text>
+                </View>
+                <View style={styles.recordingActions}>
+                  <TouchableOpacity 
+                    style={styles.actionButton}
+                    onPress={() => handleShare(item)}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  >
+                    <Share2 size={20} color={THEME.colors.accent} />
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.actionButton}
+                    onPress={() => handleDownload(item)}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  >
+                    <Download size={20} color={THEME.colors.accent} />
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.actionButton}
+                    onPress={() => handleDelete(item)}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  >
+                    <Trash2 size={20} color={THEME.colors.error} />
+                  </TouchableOpacity>
+                </View>
+              </View>
               <AudioPlayer
                 uri={item.uri}
                 title={item.title}
@@ -91,13 +187,6 @@ export default function LibraryScreen() {
                 onPlayStateChange={handlePlayStateChange(item.id)}
               />
             </View>
-            <TouchableOpacity 
-              style={styles.deleteButton}
-              onPress={() => handleDelete(item)}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            >
-              <Trash2 size={24} color={THEME.colors.error} />
-            </TouchableOpacity>
           </View>
         )}
         contentContainerStyle={[
@@ -150,9 +239,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: THEME.colors.cardBorder,
   },
+  recordingHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: THEME.spacing.sm,
+  },
+  recordingTitleContainer: {
+    flex: 1,
+    marginRight: THEME.spacing.sm,
+  },
   recordingInfo: {
     flex: 1,
-    marginBottom: THEME.spacing.sm,
   },
   recordingTitle: {
     ...THEME.typography.body,
@@ -161,11 +259,13 @@ const styles = StyleSheet.create({
   recordingMeta: {
     ...THEME.typography.caption,
   },
-  deleteButton: {
+  recordingActions: {
+    flexDirection: 'row',
+    gap: THEME.spacing.sm,
+  },
+  actionButton: {
     padding: THEME.spacing.sm,
-    alignSelf: 'flex-end',
-    position: 'absolute',
-    top: THEME.spacing.md,
-    right: THEME.spacing.md,
+    borderRadius: THEME.borderRadius.full,
+    backgroundColor: THEME.colors.background,
   },
 });

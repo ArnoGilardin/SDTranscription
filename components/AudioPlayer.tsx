@@ -1,11 +1,21 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
-import { Play, Pause, Download, Volume2 } from 'lucide-react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert } from 'react-native';
+import { 
+  Play, 
+  Pause, 
+  Download, 
+  Volume2, 
+  VolumeX, 
+  SkipBack, 
+  SkipForward,
+  RotateCcw,
+  Share2
+} from 'lucide-react-native';
 import Animated, { 
   useAnimatedStyle, 
   withTiming,
   useSharedValue,
-  runOnJS,
+  withSpring,
 } from 'react-native-reanimated';
 import { THEME } from '@/constants/theme';
 import * as Sharing from 'expo-sharing';
@@ -31,9 +41,14 @@ export default function AudioPlayer({ uri, title, duration, onPlayStateChange }:
   const [currentTime, setCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(duration);
   const [isLoading, setIsLoading] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [isExpanded, setIsExpanded] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const progressValue = useSharedValue(0);
   const volumeValue = useSharedValue(1);
+  const expandedValue = useSharedValue(0);
 
   useEffect(() => {
     if (Platform.OS === 'web') {
@@ -48,6 +63,10 @@ export default function AudioPlayer({ uri, title, duration, onPlayStateChange }:
   useEffect(() => {
     onPlayStateChange?.(isPlaying);
   }, [isPlaying, onPlayStateChange]);
+
+  useEffect(() => {
+    expandedValue.value = withSpring(isExpanded ? 1 : 0);
+  }, [isExpanded]);
 
   const setupWebAudio = () => {
     if (audioRef.current) {
@@ -92,6 +111,8 @@ export default function AudioPlayer({ uri, title, duration, onPlayStateChange }:
 
     const audioUrl = base64ToBlobUrl(uri);
     audio.src = audioUrl;
+    audio.volume = volume;
+    audio.playbackRate = playbackRate;
     audio.load();
   };
 
@@ -133,6 +154,48 @@ export default function AudioPlayer({ uri, title, duration, onPlayStateChange }:
     progressValue.value = withTiming(percentage);
   };
 
+  const skipForward = () => {
+    if (!audioRef.current) return;
+    const newTime = Math.min(audioRef.current.currentTime + 10, audioRef.current.duration);
+    audioRef.current.currentTime = newTime;
+  };
+
+  const skipBackward = () => {
+    if (!audioRef.current) return;
+    const newTime = Math.max(audioRef.current.currentTime - 10, 0);
+    audioRef.current.currentTime = newTime;
+  };
+
+  const restart = () => {
+    if (!audioRef.current) return;
+    audioRef.current.currentTime = 0;
+    setCurrentTime(0);
+    progressValue.value = withTiming(0);
+  };
+
+  const toggleMute = () => {
+    if (!audioRef.current) return;
+    const newMuted = !isMuted;
+    setIsMuted(newMuted);
+    audioRef.current.volume = newMuted ? 0 : volume;
+    volumeValue.value = withTiming(newMuted ? 0 : volume);
+  };
+
+  const changeVolume = (newVolume: number) => {
+    if (!audioRef.current) return;
+    setVolume(newVolume);
+    if (!isMuted) {
+      audioRef.current.volume = newVolume;
+      volumeValue.value = withTiming(newVolume);
+    }
+  };
+
+  const changePlaybackRate = (rate: number) => {
+    if (!audioRef.current) return;
+    setPlaybackRate(rate);
+    audioRef.current.playbackRate = rate;
+  };
+
   const handleProgressPress = (event: any) => {
     if (Platform.OS !== 'web') return;
     
@@ -153,6 +216,8 @@ export default function AudioPlayer({ uri, title, duration, onPlayStateChange }:
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        
+        Alert.alert('Téléchargement', 'Le fichier audio a été téléchargé avec succès !');
       } else {
         // Mobile download
         const fileName = `${title.replace(/[^a-zA-Z0-9]/g, '_')}.m4a`;
@@ -170,12 +235,54 @@ export default function AudioPlayer({ uri, title, duration, onPlayStateChange }:
       }
     } catch (error) {
       console.error('Download error:', error);
+      Alert.alert('Erreur', 'Impossible de télécharger le fichier audio.');
+    }
+  };
+
+  const shareAudio = async () => {
+    try {
+      if (Platform.OS === 'web') {
+        if (navigator.share) {
+          await navigator.share({
+            title: title,
+            text: `Écoutez cet enregistrement audio : ${title}`,
+            url: window.location.href
+          });
+        } else {
+          // Fallback: copy to clipboard
+          await navigator.clipboard.writeText(window.location.href);
+          Alert.alert('Lien copié', 'Le lien a été copié dans le presse-papiers !');
+        }
+      } else {
+        const fileName = `${title.replace(/[^a-zA-Z0-9]/g, '_')}.m4a`;
+        const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+        
+        await FileSystem.copyAsync({
+          from: uri,
+          to: fileUri
+        });
+
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(fileUri, {
+            mimeType: 'audio/m4a',
+            dialogTitle: `Partager ${title}`
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Share error:', error);
+      Alert.alert('Erreur', 'Impossible de partager le fichier audio.');
     }
   };
 
   const formatTime = (seconds: number) => {
-    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
     const remainingSeconds = seconds % 60;
+    
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+    }
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
@@ -187,37 +294,72 @@ export default function AudioPlayer({ uri, title, duration, onPlayStateChange }:
     opacity: volumeValue.value,
   }));
 
+  const expandedStyle = useAnimatedStyle(() => ({
+    height: withTiming(isExpanded ? 'auto' : 0),
+    opacity: withTiming(isExpanded ? 1 : 0),
+  }));
+
+  const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <View style={styles.titleContainer}>
+        <TouchableOpacity 
+          style={styles.expandButton}
+          onPress={() => setIsExpanded(!isExpanded)}
+        >
           <Volume2 size={16} color={THEME.colors.accent} />
           <Text style={styles.title} numberOfLines={1}>
             {title}
           </Text>
-        </View>
-        <TouchableOpacity 
-          style={styles.downloadButton}
-          onPress={downloadAudio}
-        >
-          <Download size={16} color={THEME.colors.accent} />
         </TouchableOpacity>
+        
+        <View style={styles.headerActions}>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={shareAudio}
+          >
+            <Share2 size={16} color={THEME.colors.accent} />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={downloadAudio}
+          >
+            <Download size={16} color={THEME.colors.accent} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.playerContainer}>
-        <TouchableOpacity
-          style={[styles.playButton, isLoading && styles.playButtonDisabled]}
-          onPress={togglePlayPause}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <View style={styles.loadingDot} />
-          ) : isPlaying ? (
-            <Pause size={20} color="#FFF" />
-          ) : (
-            <Play size={20} color="#FFF" />
-          )}
-        </TouchableOpacity>
+        <View style={styles.mainControls}>
+          <TouchableOpacity
+            style={styles.controlButton}
+            onPress={skipBackward}
+          >
+            <SkipBack size={20} color={THEME.colors.text} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.playButton, isLoading && styles.playButtonDisabled]}
+            onPress={togglePlayPause}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <View style={styles.loadingDot} />
+            ) : isPlaying ? (
+              <Pause size={24} color="#FFF" />
+            ) : (
+              <Play size={24} color="#FFF" />
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.controlButton}
+            onPress={skipForward}
+          >
+            <SkipForward size={20} color={THEME.colors.text} />
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.progressContainer}>
           <TouchableOpacity 
@@ -240,6 +382,82 @@ export default function AudioPlayer({ uri, title, duration, onPlayStateChange }:
           </View>
         </View>
       </View>
+
+      <Animated.View style={[styles.expandedControls, expandedStyle]}>
+        {isExpanded && (
+          <>
+            <View style={styles.advancedControls}>
+              <TouchableOpacity
+                style={styles.controlButton}
+                onPress={restart}
+              >
+                <RotateCcw size={18} color={THEME.colors.text} />
+                <Text style={styles.controlLabel}>Restart</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.controlButton}
+                onPress={toggleMute}
+              >
+                {isMuted ? (
+                  <VolumeX size={18} color={THEME.colors.error} />
+                ) : (
+                  <Volume2 size={18} color={THEME.colors.text} />
+                )}
+                <Text style={styles.controlLabel}>
+                  {isMuted ? 'Unmute' : 'Mute'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.volumeContainer}>
+              <Text style={styles.sectionLabel}>Volume</Text>
+              <View style={styles.volumeSlider}>
+                {[0, 0.25, 0.5, 0.75, 1].map((vol) => (
+                  <TouchableOpacity
+                    key={vol}
+                    style={[
+                      styles.volumeButton,
+                      volume === vol && styles.volumeButtonActive
+                    ]}
+                    onPress={() => changeVolume(vol)}
+                  >
+                    <Text style={[
+                      styles.volumeText,
+                      volume === vol && styles.volumeTextActive
+                    ]}>
+                      {Math.round(vol * 100)}%
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.speedContainer}>
+              <Text style={styles.sectionLabel}>Vitesse de lecture</Text>
+              <View style={styles.speedButtons}>
+                {PLAYBACK_RATES.map((rate) => (
+                  <TouchableOpacity
+                    key={rate}
+                    style={[
+                      styles.speedButton,
+                      playbackRate === rate && styles.speedButtonActive
+                    ]}
+                    onPress={() => changePlaybackRate(rate)}
+                  >
+                    <Text style={[
+                      styles.speedText,
+                      playbackRate === rate && styles.speedTextActive
+                    ]}>
+                      {rate}x
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </>
+        )}
+      </Animated.View>
     </View>
   );
 }
@@ -259,7 +477,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: THEME.spacing.md,
   },
-  titleContainer: {
+  expandButton: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
@@ -270,23 +488,39 @@ const styles = StyleSheet.create({
     marginLeft: THEME.spacing.sm,
     flex: 1,
   },
-  downloadButton: {
+  headerActions: {
+    flexDirection: 'row',
+    gap: THEME.spacing.sm,
+  },
+  actionButton: {
     padding: THEME.spacing.sm,
     borderRadius: THEME.borderRadius.full,
     backgroundColor: THEME.colors.background,
   },
   playerContainer: {
+    gap: THEME.spacing.md,
+  },
+  mainControls: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: THEME.spacing.lg,
+  },
+  controlButton: {
+    alignItems: 'center',
+    gap: THEME.spacing.xs,
+  },
+  controlLabel: {
+    ...THEME.typography.caption,
+    fontSize: 10,
   },
   playButton: {
-    width: 40,
-    height: 40,
+    width: 50,
+    height: 50,
     borderRadius: THEME.borderRadius.full,
     backgroundColor: THEME.colors.accent,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: THEME.spacing.md,
   },
   playButtonDisabled: {
     opacity: 0.6,
@@ -299,13 +533,14 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   progressContainer: {
-    flex: 1,
+    gap: THEME.spacing.sm,
   },
   progressBar: {
-    marginBottom: THEME.spacing.sm,
+    height: 40,
+    justifyContent: 'center',
   },
   progressTrack: {
-    height: 4,
+    height: 6,
     backgroundColor: THEME.colors.cardBorder,
     borderRadius: THEME.borderRadius.sm,
     overflow: 'hidden',
@@ -322,5 +557,74 @@ const styles = StyleSheet.create({
   timeText: {
     ...THEME.typography.caption,
     fontSize: 12,
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
+  },
+  expandedControls: {
+    overflow: 'hidden',
+  },
+  advancedControls: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: THEME.spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: THEME.colors.cardBorder,
+    marginTop: THEME.spacing.md,
+  },
+  sectionLabel: {
+    ...THEME.typography.caption,
+    marginBottom: THEME.spacing.sm,
+    fontWeight: '600',
+  },
+  volumeContainer: {
+    marginBottom: THEME.spacing.md,
+  },
+  volumeSlider: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  volumeButton: {
+    padding: THEME.spacing.sm,
+    borderRadius: THEME.borderRadius.sm,
+    backgroundColor: THEME.colors.background,
+    minWidth: 50,
+    alignItems: 'center',
+  },
+  volumeButtonActive: {
+    backgroundColor: THEME.colors.accent,
+  },
+  volumeText: {
+    ...THEME.typography.caption,
+    fontSize: 12,
+  },
+  volumeTextActive: {
+    color: '#FFF',
+    fontWeight: '600',
+  },
+  speedContainer: {
+    marginBottom: THEME.spacing.md,
+  },
+  speedButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: THEME.spacing.sm,
+  },
+  speedButton: {
+    padding: THEME.spacing.sm,
+    paddingHorizontal: THEME.spacing.md,
+    borderRadius: THEME.borderRadius.sm,
+    backgroundColor: THEME.colors.background,
+    minWidth: 50,
+    alignItems: 'center',
+  },
+  speedButtonActive: {
+    backgroundColor: THEME.colors.accent,
+  },
+  speedText: {
+    ...THEME.typography.caption,
+    fontSize: 12,
+  },
+  speedTextActive: {
+    color: '#FFF',
+    fontWeight: '600',
   },
 });
