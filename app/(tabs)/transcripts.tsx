@@ -38,7 +38,6 @@ export default function TranscriptsScreen() {
   const { recordings, updateTranscript, transcriptionSettings } = useRecordingsStore();
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [playingId, setPlayingId] = useState<string | null>(null);
   const [serviceStatus, setServiceStatus] = useState<'unknown' | 'available' | 'unavailable'>('unknown');
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -105,14 +104,6 @@ export default function TranscriptsScreen() {
       console.log(`Transcript saved to: ${filePath}`);
     } catch (error) {
       console.error('Error saving transcript to file:', error);
-    }
-  };
-
-  const handlePlayStateChange = (recordingId: string) => (isPlaying: boolean) => {
-    if (isPlaying) {
-      setPlayingId(recordingId);
-    } else if (playingId === recordingId) {
-      setPlayingId(null);
     }
   };
 
@@ -375,13 +366,6 @@ export default function TranscriptsScreen() {
                     {new Date(item.date).toLocaleDateString()}
                   </Text>
                   
-                  <AudioPlayer
-                    uri={item.uri}
-                    title={item.title}
-                    duration={item.duration}
-                    onPlayStateChange={handlePlayStateChange(item.id)}
-                  />
-
                   <ScrollView
                     ref={scrollViewRef}
                     style={styles.transcriptContainer}
