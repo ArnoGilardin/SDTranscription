@@ -1,22 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Alert, Platform } from 'react-native';
-import { 
-  Edit3, 
-  Save, 
-  X, 
-  Type, 
-  AlignLeft, 
-  AlignCenter, 
-  AlignJustify,
-  Bold,
-  Italic,
-  Underline,
-  Copy,
-  Download,
-  RotateCcw,
-  Search,
-  Replace
-} from 'lucide-react-native';
+import { CreditCard as Edit3, Save, X, Type, AlignLeft, AlignCenter, AlignJustify, Bold, Italic, Underline, Copy, Download, RotateCcw, Search, Replace } from 'lucide-react-native';
 import Animated, { 
   useAnimatedStyle, 
   withSpring,
